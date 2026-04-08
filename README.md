@@ -125,12 +125,9 @@ ocr_study_app/
 └── ocr_project/
     ├── main.py                    # 애플리케이션 진입점
     ├── CORE/
-    │   ├── __init__.py
     │   ├── ocr_engine.py         # OCR 엔진 (EasyOCR 래퍼)
     │   └── db.py                 # 데이터베이스 관리
     └── UI/
-        ├── __init__.py
-        ├── main.py               # 메인 UI 컴포넌트
         ├── selector.py           # 영역 선택 윈도우
         ├── overlay.py            # 오버레이 윈도우
         ├── study_list.py         # 학습 목록 윈도우

@@ -64,7 +64,7 @@ class MainApp:
 
     def open_selector(self) -> None:
         try:
-            from selector import open_selector_window
+            from UI.selector import open_selector_window
 
             open_selector_window(self.root, on_selected=self._on_region_selected)
         except ImportError:
@@ -74,7 +74,7 @@ class MainApp:
 
     def open_overlay(self) -> None:
         try:
-            from overlay import open_overlay_window
+            from UI.overlay import open_overlay_window
 
             # Use OCR text if available
             if self.ocr_text:
@@ -95,7 +95,7 @@ class MainApp:
 
     def open_study_list(self) -> None:
         try:
-            from study_list import open_study_list_window
+            from UI.study_list import open_study_list_window
 
             open_study_list_window(self.root)
         except ImportError:
@@ -105,7 +105,7 @@ class MainApp:
 
     def open_test_ui(self) -> None:
         try:
-            from test_ui import open_test_window
+            from UI.test_ui import open_test_window
 
             open_test_window(self.root)
         except ImportError:
