@@ -2,6 +2,7 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional, Tuple
 import tkinter as tk
 from tkinter import messagebox
 import threading
@@ -26,262 +27,199 @@ class SelectorWindow:
     def __init__(self, parent: tk.Misc, on_selected=None) -> None:
         self.parent = parent
         self.on_selected = on_selected
+        self.ocr_engine = get_ocr_engine() if get_ocr_engine else None
+        self.capture_interval = 2.0
+        self.monitoring = False
+        self.capture_job = None
+        self.captured_texts = []
+        self.selected_region: Optional[Tuple[int, int, int, int]] = None
+        
+        self._create_selection_overlay()
 
+    def _create_selection_overlay(self) -> None:
+        self.selection_win = tk.Toplevel(self.parent)
+        self.selection_win.attributes("-topmost", True)
+        self.selection_win.attributes("-alpha", 0.3)
+        self.selection_win.overrideredirect(True)
+        sw = self.selection_win.winfo_screenwidth()
+        sh = self.selection_win.winfo_screenheight()
+        self.selection_win.geometry(f"{sw}x{sh}+0+0")
+        
+        self.selection_canvas = tk.Canvas(self.selection_win, bg="black", cursor="crosshair", highlightthickness=0)
+        self.selection_canvas.pack(fill="both", expand=True)
+        
+        self.selection_canvas.bind("<ButtonPress-1>", self._on_mouse_down)
+        self.selection_canvas.bind("<B1-Motion>", self._on_mouse_drag)
+        self.selection_canvas.bind("<ButtonRelease-1>", self._on_mouse_up)
+        
+        self.hud = tk.Frame(self.selection_win, bg="#111111", padx=10, pady=8)
+        self.hud.place(x=20, y=20)
+        
+        self.info_var = tk.StringVar(value="Drag to select area | Start to capture")
+        tk.Label(self.hud, textvariable=self.info_var, fg="white", bg="#111111", font=("Arial", 10, "bold")).pack()
+        
+        btn_frame = tk.Frame(self.hud, bg="#111111")
+        btn_frame.pack(pady=(8, 0))
+        tk.Button(btn_frame, text="Start", width=8, command=self._start_capture, bg="#2ed3ff", font=("Arial", 9, "bold")).pack(side="left")
+        tk.Button(btn_frame, text="Cancel", width=8, command=self._close, bg="#666666", fg="white", font=("Arial", 9, "bold")).pack(side="left", padx=(5, 0))
+        
+        self.rect_id = None
         self.start_x = 0
         self.start_y = 0
-        self.rect_id = None
-        self.preview_rect_id = None
-        self.selected_region = None
-        self.capture_path = None
-        self.ocr_engine = get_ocr_engine() if get_ocr_engine else None
-        self.last_capture_time = 0
-        self.capture_interval = 0.5  # 0.5초 간격으로 캡처
-        self.current_preview = None
 
-        self.win = tk.Toplevel(parent)
-        self.win.title("Region Selector")
-        self.win.overrideredirect(True)
-        self.win.attributes("-topmost", True)
-        self.win.attributes("-alpha", 0.28)
-
-        width = self.win.winfo_screenwidth()
-        height = self.win.winfo_screenheight()
-        self.win.geometry(f"{width}x{height}+0+0")
-
-        self._build_ui()
-        self._bind_shortcuts()
-
-    def _build_ui(self) -> None:
-        self.canvas = tk.Canvas(self.win, bg="black", cursor="crosshair", highlightthickness=0)
-        self.canvas.pack(fill="both", expand=True)
-
-        self.canvas.bind("<ButtonPress-1>", self._on_mouse_down)
-        self.canvas.bind("<B1-Motion>", self._on_mouse_drag)
-        self.canvas.bind("<ButtonRelease-1>", self._on_mouse_up)
-
-        self.hud = tk.Frame(self.win, bg="#111111", padx=10, pady=8)
-        self.hud.place(x=20, y=20)
-
-        self.info_var = tk.StringVar(value="Drag to select. Real-time OCR: ON")
-        tk.Label(self.hud, textvariable=self.info_var, fg="white", bg="#111111", anchor="w").pack(fill="x")
-
-        # 실시간 OCR 미리보기 영역
-        self.preview_frame = tk.Frame(self.hud, bg="#222222", width=400, height=60)
-        self.preview_frame.pack(fill="x", pady=(8, 0))
-        self.preview_frame.pack_propagate(False)
-        
-        self.preview_label = tk.Label(
-            self.preview_frame, 
-            text="OCR Preview: Drag to select area...",
-            fg="#888888",
-            bg="#222222",
-            anchor="w",
-            justify="left",
-            wraplength=380,
-            font=("Consolas", 9)
-        )
-        self.preview_label.pack(fill="both", expand=True, padx=5, pady=5)
-
-        row = tk.Frame(self.hud, bg="#111111")
-        row.pack(fill="x", pady=(8, 0))
-
-        tk.Button(row, text="Capture", width=10, command=self._capture_and_finish).pack(side="left")
-        tk.Button(row, text="Reset", width=10, command=self._reset_selection).pack(side="left", padx=(6, 0))
-        tk.Button(row, text="Cancel", width=10, command=self.win.destroy).pack(side="left", padx=(6, 0))
-
-    def _bind_shortcuts(self) -> None:
-        self.win.bind("<Return>", lambda _e: self._capture_and_finish())
-        self.win.bind("<Escape>", lambda _e: self.win.destroy())
-
-    def _on_mouse_down(self, event: tk.Event) -> None:
+    def _on_mouse_down(self, event) -> None:
         self.start_x = event.x
         self.start_y = event.y
         if self.rect_id:
-            self.canvas.delete(self.rect_id)
-        
-        # 미리보기 사각형 삭제
-        if self.preview_rect_id:
-            self.canvas.delete(self.preview_rect_id)
-            self.preview_rect_id = None
-
-        self.rect_id = self.canvas.create_rectangle(
-            self.start_x,
-            self.start_y,
-            self.start_x,
-            self.start_y,
-            outline="#2ed3ff",
-            width=2,
-            dash=(4, 3),
+            self.selection_canvas.delete(self.rect_id)
+        self.rect_id = self.selection_canvas.create_rectangle(
+            self.start_x, self.start_y, self.start_x, self.start_y,
+            outline="#2ed3ff", width=3, dash=(4, 3)
         )
 
-    def _on_mouse_drag(self, event: tk.Event) -> None:
+    def _on_mouse_drag(self, event) -> None:
         if not self.rect_id:
             return
-        self.canvas.coords(self.rect_id, self.start_x, self.start_y, event.x, event.y)
-        
-        # 실시간 캡처 및 OCR
-        self._realtime_capture(event)
+        self.selection_canvas.coords(self.rect_id, self.start_x, self.start_y, event.x, event.y)
 
-    def _realtime_capture(self, event: tk.Event) -> None:
-        """마우스 드래그 중 실시간 캡처 및 OCR"""
-        current_time = time.time()
-        if current_time - self.last_capture_time < self.capture_interval:
-            return
-        
-        # 선택 영역 계산
-        left = min(self.start_x, event.x)
-        top = min(self.start_y, event.y)
-        right = max(self.start_x, event.x)
-        bottom = max(self.start_y, event.y)
-        
-        width = right - left
-        height = bottom - top
-        
-        # 너무 작으면 스킵
-        if width < 20 or height < 20:
-            return
-        
-        self.last_capture_time = current_time
-        
-        # 캡처 실행 (백그라운드)
-        try:
-            if ImageGrab:
-                img = ImageGrab.grab(bbox=(left, top, right, bottom))
-                
-                # OCR 실행 (별도 스레드에서)
-                if self.ocr_engine:
-                    # 이미지 저장 없이 메모리에서 OCR
-                    self._run_realtime_ocr(img)
-                    
-        except Exception as e:
-            pass  # 캡처 실패는 무시
-
-    def _run_realtime_ocr(self, img) -> None:
-        """실시간 OCR 처리 (별도 스레드)"""
-        def ocr_worker():
-            try:
-                # PIL 이미지를 임시로 저장하지 않고 직접 OCR
-                # EasyOCR은 numpy array를 받을 수 있음
-                import numpy as np
-                img_array = np.array(img)
-                
-                result = self.ocr_engine.read_text_simple(img_array)
-                
-                # UI 업데이트 (메인 스레드에서)
-                self.win.after(0, lambda: self._update_preview(result))
-                
-            except Exception as e:
-                pass
-        
-        # 별도 스레드에서 OCR 실행
-        thread = threading.Thread(target=ocr_worker, daemon=True)
-        thread.start()
-
-    def _update_preview(self, ocr_result) -> None:
-        """미리보기 영역 업데이트"""
-        if ocr_result:
-            text = '\n'.join(ocr_result[:5])  # 최대 5개 텍스트만
-            if len('\n'.join(ocr_result)) > 200:
-                text += "\n..."
-            self.preview_label.config(text=f"OCR Result:\n{text}", fg="#00ff00")
-        else:
-            self.preview_label.config(text="No text detected", fg="#ff6600")
-
-    def _on_mouse_up(self, event: tk.Event) -> None:
+    def _on_mouse_up(self, event) -> None:
         if not self.rect_id:
             return
-        left = min(self.start_x, event.x)
-        top = min(self.start_y, event.y)
-        right = max(self.start_x, event.x)
-        bottom = max(self.start_y, event.y)
-        self.selected_region = (left, top, right, bottom)
-        w = right - left
-        h = bottom - top
-        self.info_var.set(f"Selected: ({left},{top})-({right},{bottom})  Size: {w}x{h}")
+        x1 = min(self.start_x, event.x)
+        y1 = min(self.start_y, event.y)
+        x2 = max(self.start_x, event.x)
+        y2 = max(self.start_y, event.y)
+        self.selected_region = (x1, y1, x2, y2)
+        w, h = x2 - x1, y2 - y1
+        self.info_var.set(f"Selected: {w}x{h} | Press Start")
 
-    def _reset_selection(self) -> None:
-        if self.rect_id:
-            self.canvas.delete(self.rect_id)
-            self.rect_id = None
-        if self.preview_rect_id:
-            self.canvas.delete(self.preview_rect_id)
-            self.preview_rect_id = None
-        self.selected_region = None
-        self.capture_path = None
-        self.preview_label.config(text="OCR Preview: Drag to select area...", fg="#888888")
-        self.info_var.set("Drag to select. Real-time OCR: ON")
-
-    def _capture_and_finish(self) -> None:
+    def _start_capture(self) -> None:
         if not self.selected_region:
             messagebox.showwarning("Notice", "Please select an area first.")
             return
-
-        if ImageGrab is None:
-            messagebox.showwarning("Notice", "Pillow is not installed. Region is saved without image capture.")
-            self._emit_callback_and_close()
-            return
-
-        left, top, right, bottom = self.selected_region
-        width = right - left
-        height = bottom - top
         
-        if width < 10 or height < 10:
-            messagebox.showwarning("Notice", "Selection is too small. Minimum 10x10 pixels required.")
+        x1, y1, x2, y2 = self.selected_region
+        if x2 - x1 < 20 or y2 - y1 < 20:
+            messagebox.showwarning("Notice", "Area too small.")
             return
+        
+        self.monitoring = True
+        self.captured_texts = []
+        self.selection_win.attributes("-alpha", 0)
+        
+        self._create_capture_ui(x1, y1, x2 - x1, y2 - y1)
+        self._create_region_border(x1, y1, x2, y2)
+        self._capture_loop()
 
-        self.info_var.set(f"Capturing... {width}x{height}")
-        self.win.update()
+    def _create_capture_ui(self, x: int, y: int, w: int, h: int) -> None:
+        self.capture_win = tk.Toplevel(self.parent)
+        self.capture_win.attributes("-topmost", True)
+        self.capture_win.attributes("-alpha", 0.9)
+        self.capture_win.geometry(f"280x180+{x}+{y + h + 10}")
+        self.capture_win.configure(bg="#222222")
+        
+        tk.Label(self.capture_win, text=f"Capturing: {w}x{h}", fg="#2ed3ff", bg="#222222", font=("Arial", 10, "bold")).pack(pady=(10, 5))
+        
+        self.capture_preview = tk.Label(self.capture_win, text="Starting...", fg="#00ff00", bg="#222222", font=("Consolas", 9), anchor="w", justify="left", wraplen=260)
+        self.capture_preview.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        btn_frame = tk.Frame(self.capture_win, bg="#222222")
+        btn_frame.pack(pady=10)
+        tk.Button(btn_frame, text="Stop", width=8, command=self._stop_capture, bg="#ff6b6b", fg="white", font=("Arial", 9, "bold")).pack(side="left")
+        tk.Button(btn_frame, text="Reset", width=8, command=self._reset, bg="#888888", fg="white", font=("Arial", 9, "bold")).pack(side="left", padx=(5, 0))
 
+    def _create_region_border(self, x1: int, y1: int, x2: int, y2: int) -> None:
+        sw = self.parent.winfo_screenwidth()
+        sh = self.parent.winfo_screenheight()
+        
+        self.border_win = tk.Toplevel(self.parent)
+        self.border_win.attributes("-topmost", True)
+        self.border_win.attributes("-alpha", 0.01)
+        self.border_win.overrideredirect(True)
+        self.border_win.geometry(f"{sw}x{sh}+0+0")
+        self.border_win.configure(bg="black")
+        
+        canvas = tk.Canvas(self.border_win, bg="", highlightthickness=0)
+        canvas.pack(fill="both", expand=True)
+        canvas.create_rectangle(x1, y1, x2, y2, outline="#2ed3ff", width=3)
+        canvas.create_text((x1 + x2) // 2, y1 - 15, text="OCR Active", fill="#2ed3ff", font=("Arial", 12, "bold"))
+
+    def _capture_loop(self) -> None:
+        if not self.monitoring:
+            return
+        
+        self._do_capture()
+        self.capture_job = self.parent.after(int(self.capture_interval * 1000), self._capture_loop)
+
+    def _do_capture(self) -> None:
+        if not self.selected_region or not ImageGrab:
+            return
+        
         try:
-            # 캡처 전 화면 업데이트
-            self.win.update_idletasks()
-            
-            # 이미지 캡처
-            img = ImageGrab.grab(bbox=(left, top, right, bottom))
-            
-            # 캡처 결과 확인
-            img_width, img_height = img.size
-            self.info_var.set(f"Captured: {img_width}x{img_height} pixels")
-            self.win.update()
-            
-            # 저장
-            out_dir = Path(__file__).resolve().parent / "captures"
-            out_dir.mkdir(parents=True, exist_ok=True)
-            name = f"capture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            path = out_dir / name
-            img.save(path)
-            self.capture_path = str(path)
-            
-            self.info_var.set(f"Saved: {name}")
-            self.win.update()
-            
-        except Exception as exc:
-            messagebox.showerror("Error", f"Capture failed.\n{exc}")
-            return
+            x1, y1, x2, y2 = self.selected_region
+            img = ImageGrab.grab(bbox=(x1, y1, x2, y2))
+            self._process_image(img)
+        except Exception as e:
+            print(f"[ERROR] Capture: {e}")
 
-        # Run OCR
-        ocr_text = []
-        if self.ocr_engine and self.capture_path:
-            self.info_var.set("Processing OCR...")
-            self.win.update()
+    def _process_image(self, img) -> None:
+        def worker():
             try:
-                ocr_text = self.ocr_engine.read_text_simple(self.capture_path)
-                if ocr_text:
-                    self.info_var.set(f"OCR: {len(ocr_text)} text(s) found")
-                else:
-                    self.info_var.set("No text detected")
+                img_array = np.array(img)
+                result = self.ocr_engine.read_text_simple(img_array)
+                
+                if result:
+                    new = [t for t in result if t.strip() and t not in self.captured_texts]
+                    self.captured_texts.extend(new)
+                    self.parent.after(0, lambda r=result: self._update_ui(r))
             except Exception as e:
-                self.info_var.set(f"OCR failed: {e}")
+                print(f"[ERROR] OCR: {e}")
+        
+        threading.Thread(target=worker, daemon=True).start()
 
-        self._emit_callback_and_close(ocr_text)
+    def _update_ui(self, result: List[str]) -> None:
+        if not self.capture_preview:
+            return
+        
+        if result:
+            text = '\n'.join(result[:6])
+            self.capture_preview.config(text=text, fg="#00ff00")
+        else:
+            self.capture_preview.config(text="...", fg="#888888")
 
-    def _emit_callback_and_close(self, ocr_text=None) -> None:
-        if callable(self.on_selected):
+    def _stop_capture(self) -> None:
+        self.monitoring = False
+        if self.capture_job:
+            self.parent.after_cancel(self.capture_job)
+        
+        if hasattr(self, 'border_win') and self.border_win:
+            self.border_win.destroy()
+        
+        if hasattr(self, 'capture_win') and self.capture_win:
+            self.capture_win.destroy()
+        
+        self.selection_win.attributes("-alpha", 0.3)
+        
+        if self.captured_texts and callable(self.on_selected):
+            self.on_selected(self.selected_region, None, self.captured_texts)
+
+    def _reset(self) -> None:
+        self._stop_capture()
+        self.selected_region = None
+        self.captured_texts = []
+        self.info_var.set("Drag to select area | Start to capture")
+        if self.rect_id:
+            self.selection_canvas.delete(self.rect_id)
+            self.rect_id = None
+
+    def _close(self) -> None:
+        self._stop_capture()
+        if hasattr(self, 'border_win') and self.border_win:
             try:
-                self.on_selected(self.selected_region, self.capture_path, ocr_text or [])
-            except TypeError:
-                self.on_selected(self.selected_region, self.capture_path)
-        self.win.destroy()
+                self.border_win.destroy()
+            except:
+                pass
+        self.selection_win.destroy()
 
 
 def open_selector_window(parent: tk.Misc, on_selected=None) -> SelectorWindow:

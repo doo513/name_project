@@ -49,7 +49,7 @@ class OCREngine:
             languages: List of language codes (e.g., ['en', 'ru', 'ar', 'ko']).
                       Defaults to ['en', 'ru', 'ar', 'ko'] if not provided.
         """
-        self.languages = languages or ['en', 'ru', 'ar', 'ko']
+        self.languages = languages or ['ko', 'en']
         self._reader: Optional[object] = None
 
     def _ensure_reader(self) -> bool:
@@ -67,7 +67,7 @@ class OCREngine:
             return False
 
         try:
-            self._reader = easyocr.Reader(self.languages, gpu=False)
+            self._reader = easyocr.Reader(self.languages, gpu=False, verbose=False)
             return True
         except Exception as e:
             logger.error(f"Failed to initialize EasyOCR reader: {e}")
@@ -124,7 +124,7 @@ class OCREngine:
         Extract text from image (simple format, text only).
         
         Args:
-            image_path: Path to the image file.
+            image_path: Path to the image file OR numpy array image.
         
         Returns:
             List of extracted text strings.
@@ -140,6 +140,13 @@ class OCREngine:
             return []
 
         try:
+            # Check if it's a numpy array (memory image)
+            import numpy as np
+            if isinstance(image_path, np.ndarray):
+                result = self._reader.readtext(image_path, detail=0)
+                return list(result)
+            
+            # Otherwise treat as file path
             image_path = Path(image_path)
             if not image_path.exists():
                 logger.warning(f"Image file not found: {image_path}")
@@ -151,5 +158,5 @@ class OCREngine:
             return list(result)
 
         except Exception as e:
-            logger.error(f"Failed to read text from {image_path}: {e}")
+            logger.error(f"Failed to read text: {e}")
             return []

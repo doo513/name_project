@@ -61,6 +61,7 @@ class MainApp:
             preview = '\n'.join(self.ocr_text)
             truncated = preview[:100] + ('...' if len(preview) > 100 else '')
             self.capture_label_var.set(f"OCR: {truncated}")
+        self.open_overlay()
 
     def open_selector(self) -> None:
         try:
