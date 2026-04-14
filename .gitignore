@@ -39,3 +39,4 @@ Thumbs.db
 # App-specific
 ocr_project/CORE/ocr_study.db
 ocr_project/UI/captures/
+ocr_project/ocr_study_app/
