@@ -40,6 +40,9 @@ class OverlayWindow:
         self._render_meta()
         self.set_result_text(initial_text or self._default_text())
 
+    def is_open(self) -> bool:
+        return bool(getattr(self, "win", None) and self.win.winfo_exists())
+
     def _build_ui(self) -> None:
         header = tk.Frame(self.win, padx=10, pady=8, bg="#111111")
         header.pack(fill="x")
@@ -86,6 +89,11 @@ class OverlayWindow:
     def _render_meta(self) -> None:
         self.region_var.set(f"Region: {self.selected_region if self.selected_region else 'None'}")
         self.capture_var.set(f"Capture: {self.capture_path if self.capture_path else 'None'}")
+
+    def update_context(self, selected_region=None, capture_path: Optional[str] = None) -> None:
+        self.selected_region = selected_region
+        self.capture_path = capture_path
+        self._render_meta()
 
     def _default_text(self) -> str:
         return (

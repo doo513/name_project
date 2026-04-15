@@ -1,319 +1,102 @@
-# OCR 통합 학습 앱
+# OCR OSS
 
-이 프로젝트는 OCR(광학 문자 인식) 기술을 활용한 통합 학습 애플리케이션입니다. 사용자가 화면의 특정 영역을 선택하면 자동으로 텍스트를 추출하고, 이를 학습 자료로 활용할 수 있는 기능을 제공합니다.
+Python `tkinter` desktop app for selecting a screen region, capturing it on an interval, and running OCR only when the image changes.
 
-## 주요 기능
+## How To Use
 
-### 1. 지역 선택 및 OCR 처리
-- **동적 영역 선택**: 마우스를 드래그하여 화면에서 원하는 영역을 선택
-- **자동 텍스트 추출**: 선택한 영역에서 자동으로 텍스트를 인식
-- **다국어 지원**: 영어, 러시아어, 아랍어, 한국어 등 다양한 언어 지원
-- **신뢰도 점수**: 각 추출된 텍스트와 함께 신뢰도 점수 제공
+### 1. Install
 
-### 2. 오버레이 윈도우
-- **투명한 디스플레이**: 반투명 오버레이 창에 OCR 결과를 표시
-- **비침투적 UI**: 사용 중에 다른 작업을 방해하지 않음
-- **실시간 업데이트**: OCR 결과를 실시간으로 확인 가능
-
-### 3. 학습 목록 관리 ⚠️
-- **결과 저장**: 추출한 텍스트를 데이터베이스에 저장 시도 (실패 시 파일로 저장)
-- **학습 기록 조회**: 이전에 추출한 모든 텍스트 목록 확인 (데이터 import 성공 시)
-- **편집 및 정리**: 저장된 학습 자료 관리 기능
-
-### 4. 테스트 UI
-- **기능 테스트**: OCR 엔진의 다양한 기능 테스트 (개발 및 디버깅 목적)
-- **디버깅 도구**: 개발 및 문제 해결을 위한 테스트 인터페이스
-
-## 설치 방법
-
-### 1. Python 환경 설정
-Python 3.8 이상이 필요합니다.
-
-```bash
-# 저장소 클론
-git clone <repository-url>
-cd ocr_study_app
-
-# 가상 환경 생성 (권장)
-python -m venv venv
-
-# 가상 환경 활성화
-# Windows
-venv\Scripts\activate
-# macOS/Linux
-source venv/bin/activate
-```
-
-### 2. 의존성 설치
 ```bash
 pip install -r requirements.txt
 ```
 
-필수 패키지:
-- **easyocr** (≥1.7.0): 다국어 OCR 엔진
-- **opencv-python** (≥4.5.0): 이미지 처리
-- **Pillow** (≥9.0.0): 이미지 조작
+### 2. Run
 
-### 3. 애플리케이션 실행
 ```bash
 cd ocr_project
 python main.py
 ```
 
-## 사용 방법
+### 3. Current Flow
 
-### 기본 워크플로우
+1. Click `Open Region Selector`.
+2. Drag to select the OCR region.
+3. The `Capture OCR Panel` starts monitoring that area every 2 seconds.
+4. OCR runs only when the captured image is different from the last frame, or when `Recognize Now` is pressed.
+5. The panel shows only the latest OCR result. Results are not accumulated.
+6. Click `Save` to store the current result in the local database.
+7. Open `Study List` to review saved results.
 
-1. **애플리케이션 시작**
-   - `main.py` 실행
-   - 메인 허브 윈도우 시작
+## Current Development Status
 
-2. **영역 선택**
-   - "Open Region Selector" 버튼 클릭
-   - 화면에서 마우스를 드래그하여 텍스트가 있는 영역 선택
-   - 자동으로 OCR 처리 수행
+### Implemented
 
-3. **결과 확인**
-    - 추출된 텍스트가 메인 윈도우에 미리보기로 표시
-    - "Open Overlay" 버튼으로 오버레이 창 열어서 상세 확인 (단, 데이터베이스 저장은 보장되지 않음)
+- Region selection is separated from OCR execution.
+- Capture and OCR responsibilities are split into separate modules.
+- OCR runs after change detection instead of on every frame.
+- Manual recognition is available from the capture panel.
+- The app keeps only the latest OCR result in memory.
+- OCR language selection is available as a 2-language pair.
+- Save is user-driven and stores the current result to SQLite.
+- Each saved record includes a JSON payload with `time` and `content`.
 
-4. **학습 자료 관리**
-   - "Open Study List" 버튼으로 저장된 모든 결과 조회
-   - 필요한 자료 검색 및 관리
+### Current Save Format
 
-### 각 기능별 사용법
+Saved OCR records keep plain text for list and search features, and also store a JSON payload in the database.
 
-#### Region Selector (영역 선택기)
-- 마우스 왼쪽 버튼으로 드래그하여 선택 영역 지정
-- 선택 완료 후 자동으로 해당 영역 캡처 및 OCR 처리
-- 결과는 자동으로 메인 창에 반영됨
-
-#### Overlay Window (오버레이 창)
-- 선택한 영역의 OCR 결과를 반투명 창에 표시
-- 창은 항상 위에 표시되어 참고용으로 사용 가능
-- 창 이동 및 크기 조정 지원
-- **주의**: 저장 기능은 데이터베이스 저장 시도 후 실패하면 파일 저장으로 폴백
-
-#### Study List (학습 목록)
-- 데이터베이스에 저장된 모든 OCR 결과 목록 (데이터 import 성공 시에만 동작)
-- 시간순으로 정렬된 학습 기록
-- 각 항목의 상세 정보 확인 가능
-- **주의**: Study List UI와 Test UI는 데이터 import 단계에서 오류가 발생할 수 있음
-
-## 현재 구현 상태
-
-### ✅ 안정적으로 작동하는 기능
-- **OCR 엔진**: EasyOCR을 사용한 4개 언어(영어, 러시아어, 아랍어, 한국어) 텍스트 인식
-- **영역 선택기 (Selector)**: 마우스 드래그로 화면 영역 선택 및 캡처
-- **메인 윈도우**: OCR 결과 미리보기 표시
-- **오버레이 윈도우**: 투명 윈도우에서 결과 확인
-
-### ⚠️ 부분적으로 작동하는 기능
-- **데이터베이스 저장**: 오버레이에서 저장 시도 시 데이터베이스 저장을 시도하지만 실패하면 파일로 폴백
-- **Study List UI**: 데이터 import 단계에서 오류가 발생할 수 있음
-- **Test UI**: 데이터 import 단계에서 오류가 발생할 수 있음
-
-### 📋 향후 개선 필요 항목
-아래 "향후 개선 계획" 섹션을 참고하세요.
-
-## 파일 구조
-
-```
-ocr_study_app/
-├── README.md                      # 이 파일
-├── requirements.txt               # Python 패키지 의존성
-└── ocr_project/
-    ├── main.py                    # 애플리케이션 진입점
-    ├── CORE/
-    │   ├── ocr_engine.py         # OCR 엔진 (EasyOCR 래퍼)
-    │   └── db.py                 # 데이터베이스 관리
-    └── UI/
-        ├── selector.py           # 영역 선택 윈도우
-        ├── overlay.py            # 오버레이 윈도우
-        ├── study_list.py         # 학습 목록 윈도우
-        └── test_ui.py            # 테스트 UI 컴포넌트
+```json
+{
+  "time": "2026-04-15T14:30:00",
+  "content": "recognized text"
+}
 ```
 
-### 주요 모듈 설명
+## Current Structure
 
-#### ocr_engine.py
-- **클래스**: `OCREngine`
-- **기능**: EasyOCR을 래핑한 다국어 텍스트 인식 엔진
-- **메서드**:
-  - `__init__(languages)`: 엔진 초기화 (기본 언어: 영어, 러시아어, 아랍어, 한국어)
-  - `is_available()`: OCR 엔진 사용 가능 여부 확인
-  - `read_text(image_path)`: 이미지에서 텍스트와 신뢰도 점수 추출
-  - `read_text_simple(image_path)`: 이미지에서 텍스트만 추출
-
-#### db.py
-- **기능**: SQLite 데이터베이스 기반 OCR 결과 저장 및 조회
-- **역할**: 학습 기록 영속성 관리
-
-#### main.py
-- **역할**: 애플리케이션의 메인 진입점
-- **기능**: 네 가지 주요 UI 창 관리
-  1. Region Selector
-  2. Overlay Window
-  3. Study List
-  4. Test UI
-
-#### selector.py
-- **기능**: 마우스 드래그 방식의 영역 선택 인터페이스
-- **특징**: 선택 완료 후 자동으로 캡처 및 OCR 처리
-
-#### overlay.py
-- **기능**: 선택한 영역의 OCR 결과를 반투명 윈도우로 표시
-- **특징**: 항상 최상위에 표시되는 투명 오버레이
-
-#### study_list.py
-- **기능**: 저장된 모든 OCR 결과 조회 및 관리
-- **특징**: 데이터베이스 기반 학습 기록 목록
-
-## 기술 아키텍처
-
-### 시스템 구성
-
-```
-┌─────────────────────────────────────┐
-│        Main Application Hub         │
-│  (main.py - MainApp)                │
-└────────────┬──────────────────────┬─┘
-             │                      │
-    ┌────────▼─────────┐   ┌───────▼─────────┐
-    │ UI Components    │   │ Core Engines    │
-    ├──────────────────┤   ├─────────────────┤
-    │ - Selector       │   │ - OCR Engine    │
-    │ - Overlay        │   │ - Database      │
-    │ - Study List     │   │                 │
-    │ - Test UI        │   │                 │
-    └────────────┬─────┘   └────────┬────────┘
-                 │                  │
-                 └──────────┬───────┘
-                            │
-                    ┌───────▼────────┐
-                    │ External Libs  │
-                    ├────────────────┤
-                    │ - EasyOCR      │
-                    │ - OpenCV       │
-                    │ - Pillow       │
-                    │ - SQLite       │
-                    └────────────────┘
+```text
+ocr_project/
+|- main.py
+|- CORE/
+|  |- db.py
+|  |- ocr_engine.py
+|  \- ocr_service.py
+\- UI/
+   |- capture_monitor.py
+   |- selector.py
+   |- study_list.py
+   |- test_ui.py
+   \- overlay.py
 ```
 
-### OCR 처리 파이프라인
+## Design Notes
 
-```
-영역 선택 (Selector)
-    ↓
-이미지 캡처
-    ↓
-OCR 엔진 (EasyOCR)
-    ↓
-텍스트 추출 + 신뢰도 점수
-    ↓
-데이터베이스 저장
-    ↓
-UI 표시 (Overlay/Study List)
-```
+- Screen capture is relatively cheap. OCR is the expensive step.
+- The current design avoids repeated OCR by checking whether the frame changed first.
+- Results are intentionally not accumulated. The user decides when the current OCR output should be saved.
+- The current language model strategy is a simple 2-language pair chosen by the user.
 
-## 개발 가이드
+## Known Limits
 
-### 환경 요구사항
-- Python 3.8+
-- pip (Python 패키지 관리자)
-- 충분한 저장 공간 (EasyOCR 모델 다운로드용)
+- OCR accuracy still depends heavily on ROI size, text size, contrast, and the selected language pair.
+- Very wide regions are slower and usually less accurate than narrow, focused regions.
+- `overlay.py` is still present in the repo, but the current main flow uses `capture_monitor.py` instead.
 
-### 코드 스타일
-- Python PEP 8 준수
-- 타입 힌팅 사용 (Python 3.5+)
-- 명확한 함수 문서화
+## Next Development Items
 
-### 로깅
-- 모든 중요 동작은 Python 로깅 모듈 사용
-- 에러 및 경고 메시지는 로그 파일에 기록
+### Short Term
 
-## 향후 개선 계획
+- Add OCR preprocessing such as upscale, grayscale, contrast, and threshold.
+- Expose capture interval and more OCR options in the UI.
+- Decide whether `overlay.py` should be removed entirely.
+- Improve save metadata if region or language history becomes important.
 
-### 단기 개선 사항 (현재 부분적 동작)
-- [ ] Study List 데이터 import 오류 해결
-- [ ] Test UI 데이터 import 오류 해결
-- [ ] 오버레이 저장 기능 신뢰성 강화
-- [ ] 추가 언어 지원 확대
+### Mid Term
 
-### 중기 개선 사항 (계획됨)
-- [ ] OCR 신뢰도 필터링 기능
-- [ ] 추출 텍스트 편집 및 수정 기능
-- [ ] 검색 및 필터링 강화
-- [ ] GPU 가속 지원 (CUDA)
-- [ ] 배치 처리 기능 추가
-- [ ] 성능 최적화 및 메모리 관리
-- [ ] 고급 이미지 전처리 옵션
+- Add separate subtitle mode and document mode.
+- Compare OCR engines for better accuracy and memory usage.
+- Improve saved-result filtering and study workflows.
 
-### 장기 개선 사항 (계획됨)
-- [ ] 웹 기반 인터페이스 개발
-- [ ] 클라우드 저장소 통합
-- [ ] 머신러닝 기반 텍스트 자동 분류
-- [ ] API 서버 개발 및 배포
+### Long Term
 
-### 사용자 피드백 반영 (계획됨)
-- [ ] 사용자 정의 언어 설정
-- [ ] 결과 내보내기 기능 (PDF, TXT, DOCX)
-- [ ] 핫키 및 단축키 지원
-- [ ] 다크 모드 UI 테마
-
-## 문제 해결
-
-### 자주 발생하는 문제
-
-#### 1. EasyOCR 모델 다운로드 실패
-```
-문제: "Failed to download model"
-해결: 
-- 인터넷 연결 확인
-- 충분한 디스크 공간 확인 (~700MB)
-- 방화벽/프록시 설정 확인
-```
-
-#### 2. 이미지 인식 실패
-```
-문제: "Failed to read text from image"
-해결:
-- 이미지 품질 확인 (최소 100x100 pixels)
-- 이미지 포맷 지원 확인 (JPG, PNG, BMP)
-- 텍스트 명확도 확인 (너무 작거나 흐릿한 경우 실패 가능)
-```
-
-#### 3. 성능 저하
-```
-문제: 애플리케이션 반응 속도 느림
-해결:
-- 메모리 사용량 확인
-- GPU 사용 설정 고려
-- 동시 실행 프로그램 확인
-```
-
-## 라이선스
-
-이 프로젝트는 OCR OSS 연구 프로젝트의 일부입니다.
-
-## 기여 가이드
-
-버그 리포트 및 기능 제안은 프로젝트 이슈 트래커를 통해 제출해주세요.
-
-## 참고 자료
-
-### 외부 라이브러리
-- [EasyOCR](https://github.com/JaidedAI/EasyOCR) - 다국어 OCR 엔진
-- [OpenCV](https://opencv.org/) - 컴퓨터 비전 라이브러리
-- [Pillow](https://python-pillow.org/) - 이미지 처리 라이브러리
-
-### 학습 자료
-- Python 공식 문서: https://docs.python.org/3/
-- Tkinter 튜토리얼: https://docs.python.org/3/library/tkinter.html
-- OCR 개념: https://en.wikipedia.org/wiki/Optical_character_recognition
-
----
-
-**마지막 업데이트**: 2026년 4월
-**버전**: 1.0.0
-**개발자**: OCR OSS 프로젝트 팀
+- Explore translation and summary workflows on top of OCR output.
+- Evaluate GPU or batch-oriented OCR if the app grows beyond small ROI capture.
