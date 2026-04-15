@@ -32,6 +32,7 @@ class CaptureMonitor:
         self.active = False
         self.capture_job = None
         self._stopped = False
+        self.outline_windows = []
 
         self._build_window()
 
@@ -140,6 +141,7 @@ class CaptureMonitor:
             return
 
         self.active = True
+        self._show_region_outline()
         self.set_status(f"Capturing every {self.interval_seconds:.1f} seconds.")
         self._capture_loop()
 
@@ -187,6 +189,43 @@ class CaptureMonitor:
         self.result_text.delete("1.0", "end")
         self.result_text.insert("1.0", text or "No text detected.")
 
+    def _show_region_outline(self) -> None:
+        self._destroy_region_outline()
+
+        x1, y1, x2, y2 = self.region
+        width = max(1, x2 - x1)
+        height = max(1, y2 - y1)
+        border = 3
+        screen_width = self.parent.winfo_screenwidth()
+        screen_height = self.parent.winfo_screenheight()
+
+        outer_x = max(0, x1 - border)
+        outer_y = max(0, y1 - border)
+        outer_width = min(screen_width - outer_x, width + border * 2)
+        outer_height = min(screen_height - outer_y, height + border * 2)
+
+        segments = [
+            (outer_x, outer_y, outer_width, border),
+            (outer_x, min(screen_height - border, y2), outer_width, border),
+            (outer_x, outer_y, border, outer_height),
+            (min(screen_width - border, x2), outer_y, border, outer_height),
+        ]
+
+        for x, y, segment_width, segment_height in segments:
+            outline = tk.Toplevel(self.parent)
+            outline.overrideredirect(True)
+            outline.attributes("-topmost", True)
+            outline.attributes("-alpha", 0.85)
+            outline.configure(bg="#2ed3ff")
+            outline.geometry(f"{segment_width}x{segment_height}+{x}+{y}")
+            self.outline_windows.append(outline)
+
+    def _destroy_region_outline(self) -> None:
+        for outline in self.outline_windows:
+            if outline.winfo_exists():
+                outline.destroy()
+        self.outline_windows = []
+
     def stop(self, notify: bool = True) -> None:
         if self._stopped:
             return
@@ -197,6 +236,8 @@ class CaptureMonitor:
         if self.capture_job:
             self.parent.after_cancel(self.capture_job)
             self.capture_job = None
+
+        self._destroy_region_outline()
 
         if getattr(self, "win", None) and self.win.winfo_exists():
             self.win.destroy()

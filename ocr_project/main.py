@@ -1,3 +1,4 @@
+import sys
 import threading
 from hashlib import sha1
 from typing import List, Optional, Tuple
@@ -24,6 +25,21 @@ LANGUAGE_OPTIONS = [
 ]
 
 
+def _enable_windows_dpi_awareness() -> None:
+    if sys.platform != "win32":
+        return
+
+    try:
+        import ctypes
+
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
 class MainApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -32,6 +48,7 @@ class MainApp:
         self.root.resizable(False, False)
 
         self.capture_interval_seconds = 2.0
+        self.capture_padding_pixels = 8
         self.selected_region: Optional[Region] = None
         self.capture_path = None
         self.ocr_text: List[str] = []
@@ -58,7 +75,7 @@ class MainApp:
         self._build_language_controls()
         self._update_language_summary()
 
-        self.region_label_var = tk.StringVar(value="Selected Region: None")
+        self.region_label_var = tk.StringVar(value="Monitoring Region: None")
         self.status_label_var = tk.StringVar(value="Capture Status: Idle")
         self.preview_label_var = tk.StringVar(value="OCR Preview: None")
 
@@ -161,19 +178,23 @@ class MainApp:
         self.language_summary_var.set(f"OCR Languages: {', '.join(codes)}")
 
     def _on_region_selected(self, region: Region) -> None:
+        monitored_region = self._expand_capture_region(region)
         self.capture_session_id += 1
-        self.selected_region = region
+        self.selected_region = monitored_region
         self.capture_path = None
         self.ocr_text = []
         self.last_result_languages = []
         self.last_frame_signature = None
         self.ocr_in_flight = False
 
-        self.region_label_var.set(f"Selected Region: {region}")
-        self._set_capture_status(f"Monitoring selected region every {self.capture_interval_seconds:.1f} seconds.")
+        self.region_label_var.set(f"Monitoring Region: {monitored_region}")
+        self._set_capture_status(
+            f"Monitoring selected region every {self.capture_interval_seconds:.1f} seconds "
+            f"with {self.capture_padding_pixels}px edge padding."
+        )
         self._set_preview([])
 
-        self._start_capture_monitor(region)
+        self._start_capture_monitor(monitored_region)
 
     def _start_capture_monitor(self, region: Region) -> None:
         if self.capture_monitor is not None:
@@ -323,6 +344,18 @@ class MainApp:
         sample = image.convert("L").resize((32, 32))
         return sha1(sample.tobytes()).hexdigest()
 
+    def _expand_capture_region(self, region: Region) -> Region:
+        x1, y1, x2, y2 = region
+        padding = self.capture_padding_pixels
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        left = max(0, x1 - padding)
+        top = max(0, y1 - padding)
+        right = min(screen_width, x2 + padding + 1)
+        bottom = min(screen_height, y2 + padding + 1)
+        return (left, top, right, bottom)
+
     def _set_capture_status(self, text: str) -> None:
         self.status_label_var.set(f"Capture Status: {text}")
 
@@ -384,6 +417,7 @@ class MainApp:
 
 
 def main() -> None:
+    _enable_windows_dpi_awareness()
     root = tk.Tk()
     MainApp(root)
     root.mainloop()
