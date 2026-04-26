@@ -216,7 +216,10 @@ class MainApp:
 
         def worker() -> None:
             try:
+                raw_result = self.ocr_service.recognize_image_raw(image)
+                print(f"DEBUG OCR raw: {raw_result}")
                 result = self.ocr_service.recognize_image(image)
+                print(f"DEBUG OCR cleaned: {result}")
                 error = None
             except Exception as exc:
                 result = []

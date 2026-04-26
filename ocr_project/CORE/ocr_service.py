@@ -13,12 +13,34 @@ def clean_ocr_text(lines: List[str]) -> List[str]:
         return lines
     
     cleaned = []
+    prev_line = ""
+    
     for line in lines:
         if not line:
             continue
         line = line.strip()
-        if line:
-            cleaned.append(line)
+        if not line:
+            continue
+        
+        if cleaned:
+            prev_line = cleaned[-1]
+            if prev_line and (prev_line[-1].isalnum() or line[0].isalnum()):
+                char_before = prev_line[-1] if prev_line else ""
+                char_after = line[0] if line else ""
+                
+                should_merge = False
+                if char_before.isalnum() and char_after.isalnum():
+                    should_merge = True
+                elif char_before.isalnum() and char_after in "'\"":
+                    should_merge = True
+                elif char_before in "'\"" and char_after.isalnum():
+                    should_merge = True
+                
+                if should_merge:
+                    cleaned[-1] = prev_line + " " + line
+                    continue
+        
+        cleaned.append(line)
     
     while cleaned and not cleaned[-1]:
         cleaned.pop()
@@ -48,6 +70,15 @@ class OCRService:
 
     def is_available(self) -> bool:
         return self.engine is not None and np is not None and self.engine.is_available()
+
+    def recognize_image_raw(self, image) -> List[str]:
+        if self.engine is None:
+            raise RuntimeError("OCR engine is not available.")
+        if np is None:
+            raise RuntimeError("numpy is not installed.")
+        
+        image_array = np.array(image)
+        return self.engine.read_text_simple(image_array)
 
     def recognize_image(self, image) -> List[str]:
         if self.engine is None:
