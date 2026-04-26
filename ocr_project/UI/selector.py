@@ -19,21 +19,21 @@ class RegionSelectorWindow:
         self._build_overlay()
 
     def _build_overlay(self) -> None:
+        screen_width = self.parent.winfo_screenwidth()
+        screen_height = self.parent.winfo_screenheight()
+
         self.selection_win = tk.Toplevel(self.parent)
         self.selection_win.attributes("-topmost", True)
-        self.selection_win.attributes("-alpha", 0.3)
+        self.selection_win.attributes("-alpha", 0.85)
         self.selection_win.overrideredirect(True)
-        self.selection_win.configure(bg="black")
-
-        sw = self.selection_win.winfo_screenwidth()
-        sh = self.selection_win.winfo_screenheight()
-        self.selection_win.geometry(f"{sw}x{sh}+0+0")
+        self.selection_win.configure(bg="#1a1a2e")
+        self.selection_win.geometry(f"{screen_width}x{screen_height}+0+0")
         self.selection_win.focus_force()
         self.selection_win.bind("<Escape>", lambda _event: self.close())
 
         self.selection_canvas = tk.Canvas(
             self.selection_win,
-            bg="black",
+            bg="#1a1a2e",
             cursor="crosshair",
             highlightthickness=0,
         )
@@ -43,35 +43,36 @@ class RegionSelectorWindow:
         self.selection_canvas.bind("<B1-Motion>", self._on_mouse_drag)
         self.selection_canvas.bind("<ButtonRelease-1>", self._on_mouse_up)
 
-        self.hud = tk.Frame(self.selection_win, bg="#111111", padx=12, pady=10)
+        self.hud = tk.Frame(self.selection_win, bg="#0d0d1a", padx=20, pady=15, relief="raised", bd=2)
         self.hud.place(x=20, y=20)
 
         self.info_var = tk.StringVar(value="Drag to select an OCR area.")
         tk.Label(
             self.hud,
             textvariable=self.info_var,
-            fg="white",
-            bg="#111111",
-            font=("Segoe UI", 10, "bold"),
+            fg="#00ff88",
+            bg="#0d0d1a",
+            font=("Segoe UI", 11, "bold"),
         ).pack(anchor="w")
 
         tk.Label(
             self.hud,
-            text="The selected region will be passed to main.py for capture and OCR.",
-            fg="#d0d0d0",
-            bg="#111111",
+            text="Drag to select area. Press Esc to cancel.",
+            fg="#aaaaaa",
+            bg="#0d0d1a",
             font=("Segoe UI", 9),
         ).pack(anchor="w", pady=(4, 0))
 
-        btn_frame = tk.Frame(self.hud, bg="#111111")
-        btn_frame.pack(anchor="w", pady=(10, 0))
+        btn_frame = tk.Frame(self.hud, bg="#0d0d1a")
+        btn_frame.pack(anchor="w", pady=(12, 0))
 
         tk.Button(
             btn_frame,
             text="Use Area",
             width=10,
             command=self.confirm_selection,
-            bg="#2ed3ff",
+            bg="#00d4aa",
+            fg="black",
             font=("Segoe UI", 9, "bold"),
         ).pack(side="left")
         tk.Button(
@@ -79,10 +80,10 @@ class RegionSelectorWindow:
             text="Cancel",
             width=10,
             command=self.close,
-            bg="#666666",
+            bg="#444444",
             fg="white",
-            font=("Segoe UI", 9, "bold"),
-        ).pack(side="left", padx=(6, 0))
+            font=("Segoe UI", 9),
+        ).pack(side="left", padx=(8, 0))
 
     def _on_mouse_down(self, event) -> None:
         self.start_x = event.x

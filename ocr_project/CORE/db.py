@@ -44,12 +44,21 @@ def save_ocr_result(
     tags: Optional[str] = None,
     payload_json: Optional[str] = None,
     created_at: Optional[str] = None,
+    translation: Optional[str] = None,
 ) -> int:
     if not content or not content.strip():
         raise ValueError("content is empty")
 
     init_db()
     created_at = created_at or datetime.now().isoformat(timespec="seconds")
+
+    payload_data = {
+        "time": created_at,
+        "content": content.strip(),
+    }
+    if translation:
+        payload_data["translation"] = translation.strip()
+    payload_json = json.dumps(payload_data, ensure_ascii=False)
 
     with get_connection() as conn:
         cursor = conn.execute(
@@ -71,21 +80,23 @@ def insert_ocr_result(content: str) -> int:
     return save_ocr_result(content=content)
 
 
-def save_json_record(content: str, source_region: Optional[str] = None, tags: Optional[str] = None) -> int:
+def save_json_record(content: str, source_region: Optional[str] = None, tags: Optional[str] = None, translation: Optional[str] = None) -> int:
     timestamp = datetime.now().isoformat(timespec="seconds")
-    payload = json.dumps(
-        {
-            "time": timestamp,
-            "content": content.strip(),
-        },
-        ensure_ascii=False,
-    )
+    payload_data = {
+        "time": timestamp,
+        "content": content.strip(),
+    }
+    if translation:
+        payload_data["translation"] = translation.strip()
+    payload = json.dumps(payload_data, ensure_ascii=False)
+
     return save_ocr_result(
         content=content,
         payload_json=payload,
         source_region=source_region,
         tags=tags,
         created_at=timestamp,
+        translation=translation,
     )
 
 

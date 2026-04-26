@@ -30,6 +30,10 @@ class StudyListWindow:
         self.tree = ttk.Treeview(self.win, columns=columns, show="headings")
         self.tree.pack(fill="both", expand=True, padx=12, pady=(0, 8))
 
+        vsb = ttk.Scrollbar(self.win, orient="vertical", command=self.tree.yview)
+        vsb.pack(side="right", fill="y")
+        self.tree.configure(yscrollcommand=vsb.set)
+
         self.tree.heading("id", text="ID")
         self.tree.heading("created_at", text="Saved At")
         self.tree.heading("preview", text="Preview")
@@ -43,8 +47,12 @@ class StudyListWindow:
         detail_frame = tk.LabelFrame(self.win, text="Details", padx=8, pady=8)
         detail_frame.pack(fill="x", padx=12, pady=(0, 10))
 
-        self.detail = tk.Text(detail_frame, height=7, wrap="word", font=("Consolas", 10))
+        detail_scroll = tk.Scrollbar(detail_frame)
+        detail_scroll.pack(side="right", fill="y")
+
+        self.detail = tk.Text(detail_frame, height=7, wrap="word", font=("Consolas", 10), yscrollcommand=detail_scroll.set)
         self.detail.pack(fill="x")
+        detail_scroll.config(command=self.detail.yview)
 
         bottom = tk.Frame(self.win, padx=12, pady=(0, 12))
         bottom.pack(fill="x")

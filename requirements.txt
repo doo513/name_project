@@ -1,3 +1,5 @@
 easyocr>=1.7.0
 opencv-python>=4.5.0
 Pillow>=9.0.0
+deep-translator>=1.11.0
+mss>=9.0.0

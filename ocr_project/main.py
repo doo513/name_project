@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 
 from CORE import db
 from CORE.ocr_service import OCRService
+from CORE.translation_service import TranslationService
 
 
 Region = Tuple[int, int, int, int]
@@ -23,6 +24,7 @@ LANGUAGE_OPTIONS = [
     ("Russian", "ru"),
     ("Arabic", "ar"),
 ]
+LANGUAGE_CODE_TO_NAME = {code: name for name, code in LANGUAGE_OPTIONS}
 
 
 def _enable_windows_dpi_awareness() -> None:
@@ -44,8 +46,9 @@ class MainApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("OCR Integrated Study App")
-        self.root.geometry("600x500")
-        self.root.resizable(False, False)
+        self.root.geometry("700x600")
+        self.root.resizable(True, True)
+        self.root.minsize(500, 400)
 
         self.capture_interval_seconds = 2.0
         self.capture_padding_pixels = 8
@@ -59,123 +62,78 @@ class MainApp:
 
         self.capture_session_id = 0
         self.ocr_in_flight = False
+        self.translation_service = TranslationService()
+        self.translated_text = None
+        self.translate_target_var = tk.StringVar(value="ko")
 
         self._build_ui()
 
     def _build_ui(self) -> None:
-        tk.Label(self.root, text="Main Hub", font=("Segoe UI", 16, "bold")).pack(pady=(24, 8))
-        tk.Label(
-            self.root,
-            text="Select region in overlay, capture in monitor, OCR in main controller",
-            font=("Segoe UI", 10),
-            fg="#555555",
-        ).pack(pady=(0, 12))
+        header = tk.Frame(self.root, bg="#4B4FA6", height=100)
+        header.pack(fill="x")
+        tk.Label(header, text="OCR Study App", font=("Segoe UI", 18, "bold"), bg="#4B4FA6", fg="white").pack(pady=30)
 
-        self.language_summary_var = tk.StringVar()
+        card = tk.Frame(self.root, bg="white", highlightthickness=1, highlightbackground="#DDDDDD")
+        card.pack(padx=30, pady=20, fill="x")
+
         self._build_language_controls()
-        self._update_language_summary()
 
-        self.region_label_var = tk.StringVar(value="Monitoring Region: None")
-        self.status_label_var = tk.StringVar(value="Capture Status: Idle")
+        self.region_label_var = tk.StringVar(value="Selected Region: None")
+        self.status_label_var = tk.StringVar(value="Ready for Scanning")
         self.preview_label_var = tk.StringVar(value="OCR Preview: None")
 
-        tk.Label(
-            self.root,
-            textvariable=self.language_summary_var,
-            font=("Segoe UI", 9),
-            fg="#444444",
-        ).pack(pady=(0, 4))
-        tk.Label(
-            self.root,
-            textvariable=self.region_label_var,
-            font=("Segoe UI", 9),
-            fg="#444444",
-        ).pack(pady=(0, 4))
-        tk.Label(
-            self.root,
-            textvariable=self.status_label_var,
-            font=("Segoe UI", 9),
-            fg="#444444",
-            wraplength=500,
-        ).pack(pady=(0, 4))
-        tk.Label(
-            self.root,
-            textvariable=self.preview_label_var,
-            font=("Segoe UI", 9),
-            fg="#444444",
-            wraplength=500,
-            justify="left",
-        ).pack(pady=(0, 12))
+        tk.Label(card, text="SYSTEM STATUS", font=("Segoe UI", 8, "bold"), bg="white", fg="#65676B").pack(pady=(15, 0), padx=20, anchor="w")
+        tk.Label(card, textvariable=self.status_label_var, font=("Segoe UI", 12, "bold"), bg="white", fg="#1C1E21").pack(pady=(5, 10), padx=20, anchor="w")
+        tk.Label(card, textvariable=self.region_label_var, font=("Segoe UI", 9), bg="white", fg="#8A8D91").pack(padx=20, anchor="w")
+        tk.Label(card, textvariable=self.preview_label_var, font=("Segoe UI", 8), bg="white", fg="#8A8D91", wraplength=350, justify="left").pack(pady=(5, 15), padx=20, anchor="w")
 
-        btn_style = {
-            "width": 30,
-            "height": 2,
-            "font": ("Segoe UI", 10),
-            "bd": 0,
-            "relief": "flat",
-            "bg": "#2d6cdf",
-            "fg": "white",
-            "activebackground": "#2559b7",
-            "activeforeground": "white",
-            "cursor": "hand2",
-        }
+        btn_style = {"font": ("Segoe UI", 10, "bold"), "fg": "white", "relief": "flat", "height": 2, "cursor": "hand2"}
 
-        tk.Button(self.root, text="Open Region Selector", command=self.open_selector, **btn_style).pack(pady=6)
-        tk.Button(self.root, text="Open Capture Panel", command=self.open_capture_panel, **btn_style).pack(pady=6)
-        tk.Button(self.root, text="Open Study List", command=self.open_study_list, **btn_style).pack(pady=6)
-        tk.Button(self.root, text="Open Test UI", command=self.open_test_ui, **btn_style).pack(pady=6)
+        tk.Button(self.root, text="Open Region Selector", bg="#5E66F2", command=self.open_selector, **btn_style).pack(padx=30, fill="x", pady=5)
+        tk.Button(self.root, text="Open Overlay", bg="#6B7FF2", command=self.open_capture_panel, **btn_style).pack(padx=30, fill="x", pady=5)
+        tk.Button(self.root, text="Open Study List", bg="#99A6F2", command=self.open_study_list, **btn_style).pack(padx=30, fill="x", pady=5)
+        tk.Button(self.root, text="Open Test UI", bg="#B3BDF2", command=self.open_test_ui, **btn_style).pack(padx=30, fill="x", pady=5)
 
     def _build_language_controls(self) -> None:
-        frame = tk.Frame(self.root)
-        frame.pack(pady=(0, 10))
-
-        tk.Label(frame, text="OCR Language Pair", font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 10))
-
-        labels = [self._language_label(name, code) for name, code in LANGUAGE_OPTIONS]
-        self.language_values = {self._language_label(name, code): code for name, code in LANGUAGE_OPTIONS}
-
-        self.primary_language_var = tk.StringVar(value=self._language_label("Korean", "ko"))
-        self.secondary_language_var = tk.StringVar(value=self._language_label("English", "en"))
-
-        self.primary_language_combo = ttk.Combobox(
+        frame = tk.Frame(self.root, bg="white")
+        frame.pack(pady=(5, 10))
+        
+        tk.Label(frame, text="원본:", font=("Segoe UI", 9, "bold"), bg="white", fg="#65676B").pack(side="left", padx=(0, 5))
+        
+        self.source_lang_var = tk.StringVar(value="en")
+        
+        self.source_lang_combo = ttk.Combobox(
             frame,
-            textvariable=self.primary_language_var,
-            values=labels,
+            textvariable=self.source_lang_var,
+            values=["ko", "en", "ja", "zh", "es", "fr", "de", "ru", "ar"],
             state="readonly",
-            width=20,
+            width=8,
         )
-        self.primary_language_combo.pack(side="left")
-        self.primary_language_combo.bind("<<ComboboxSelected>>", lambda _event: self._update_language_summary())
-
-        tk.Label(frame, text="+", font=("Segoe UI", 10, "bold")).pack(side="left", padx=8)
-
-        self.secondary_language_combo = ttk.Combobox(
+        self.source_lang_combo.pack(side="left", padx=(0, 8))
+        
+        tk.Label(frame, text="->", font=("Segoe UI", 10, "bold"), bg="white", fg="#65676B").pack(side="left", padx=8)
+        
+        tk.Label(frame, text="번역:", font=("Segoe UI", 9, "bold"), bg="white", fg="#65676B").pack(side="left", padx=(0, 5))
+        
+        self.translate_target_var = tk.StringVar(value="ko")
+        
+        self.translate_target_combo = ttk.Combobox(
             frame,
-            textvariable=self.secondary_language_var,
-            values=labels,
+            textvariable=self.translate_target_var,
+            values=["ko", "en", "ja", "zh", "es", "fr", "de", "ru", "ar"],
             state="readonly",
-            width=20,
+            width=8,
         )
-        self.secondary_language_combo.pack(side="left")
-        self.secondary_language_combo.bind("<<ComboboxSelected>>", lambda _event: self._update_language_summary())
+        self.translate_target_combo.pack(side="left")
 
-    def _language_label(self, name: str, code: str) -> str:
-        return f"{name} ({code})"
+    def _get_language_display(self, code: str) -> str:
+        name = LANGUAGE_CODE_TO_NAME.get(code, code.upper())
+        return f"{name}"
 
     def _get_selected_language_codes(self) -> List[str]:
-        selected = [
-            self.language_values.get(self.primary_language_var.get(), "ko"),
-            self.language_values.get(self.secondary_language_var.get(), "en"),
-        ]
-        unique = []
-        for code in selected:
-            if code not in unique:
-                unique.append(code)
-        return unique
-
-    def _update_language_summary(self) -> None:
-        codes = self._get_selected_language_codes()
-        self.language_summary_var.set(f"OCR Languages: {', '.join(codes)}")
+        if self.capture_monitor is not None:
+            return [self.capture_monitor.get_source_lang(), self.capture_monitor.get_translate_target()]
+        return [self.source_lang_var.get(), self.translate_target_var.get()]
 
     def _on_region_selected(self, region: Region) -> None:
         monitored_region = self._expand_capture_region(region)
@@ -194,6 +152,7 @@ class MainApp:
         )
         self._set_preview([])
 
+        self.root.iconify()
         self._start_capture_monitor(monitored_region)
 
     def _start_capture_monitor(self, region: Region) -> None:
@@ -208,6 +167,7 @@ class MainApp:
             return
 
         session_id = self.capture_session_id
+        self.translation_service = TranslationService(target=self.translate_target_var.get())
         self.capture_monitor = open_capture_monitor(
             self.root,
             region=region,
@@ -220,6 +180,7 @@ class MainApp:
             ),
             on_save=self._save_current_result,
             on_stop=self._on_capture_stopped,
+            on_translate=self._on_translate_pressed,
         )
         self.capture_monitor.start()
         self.capture_monitor.set_result_text("Waiting for OCR result...")
@@ -318,12 +279,14 @@ class MainApp:
 
         content = "\n".join(self.ocr_text).strip()
         tags = ",".join(self.last_result_languages or self._get_selected_language_codes())
+        translated = self.translated_text
 
         try:
             row_id = db.save_json_record(
                 content=content,
                 source_region=str(self.selected_region),
                 tags=tags,
+                translation=translated,
             )
         except Exception as exc:
             messagebox.showerror("Error", f"Failed to save OCR result.\n{exc}")
@@ -334,11 +297,70 @@ class MainApp:
             self.capture_monitor.set_status(f"Saved OCR result #{row_id}.")
         messagebox.showinfo("Saved", f"Saved OCR result #{row_id} as JSON in the database.")
 
+    def _on_translate_pressed(self) -> None:
+        if not self.ocr_text:
+            messagebox.showwarning("Notice", "There is no OCR text to translate.")
+            return
+
+        original_text = "\n".join(self.ocr_text)
+        
+        if self.capture_monitor is not None:
+            source_lang = self.capture_monitor.get_source_lang()
+            target_lang = self.capture_monitor.get_translate_target()
+        else:
+            source_lang = self.source_lang_var.get()
+            target_lang = self.translate_target_var.get()
+
+        self.translation_service.set_source_language(source_lang)
+        self.translation_service.set_target_language(target_lang)
+
+        self._set_capture_status(f"Translating {source_lang} -> {target_lang}...")
+        if self.capture_monitor is not None:
+            self.capture_monitor.set_status(f"Translating {source_lang} -> {target_lang}...")
+
+        def worker() -> None:
+            try:
+                result = self.translation_service.translate(original_text)
+                error = None
+            except Exception as exc:
+                result = None
+                error = str(exc)
+
+            self.root.after(0, lambda: self._on_translate_complete(result, error, target_lang, source_lang))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_translate_complete(self, result: Optional[str], error: Optional[str], target_lang: str, source_lang: str) -> None:
+        if error:
+            self._set_capture_status(f"Translation failed: {error}")
+            if self.capture_monitor is not None:
+                self.capture_monitor.set_status(f"Translation failed: {error}")
+            messagebox.showerror("Translation Error", error)
+            return
+
+        original = "\n".join(self.ocr_text)
+        
+        if result and result.strip():
+            self.translated_text = result
+            display_text = f"{source_lang} -> {target_lang}:\n{original}\n\n-> {result}"
+            self._set_capture_status(f"Translated {source_lang} -> {target_lang}")
+            if self.capture_monitor is not None:
+                self.capture_monitor.set_status(f"Translated {source_lang} -> {target_lang}")
+                self.capture_monitor.set_result_text(display_text)
+        else:
+            self._set_capture_status("Translation failed")
+            if self.capture_monitor is not None:
+                self.capture_monitor.set_status("Translation failed")
+            messagebox.showwarning("Translation Warning", "번역 결과를 가져올 수 없습니다.")
+
     def _on_capture_stopped(self) -> None:
         self.capture_monitor = None
         self.ocr_in_flight = False
         self.capture_session_id += 1
         self._set_capture_status("Capture stopped.")
+        if self.root.winfo_exists():
+            self.root.deiconify()
+            self.root.lift()
 
     def _make_frame_signature(self, image) -> str:
         sample = image.convert("L").resize((32, 32))
