@@ -1,57 +1,53 @@
 # OCR OSS
 
-Python `tkinter` desktop app for selecting a screen region, capturing it on an interval, and running OCR only when the image changes.
+Python `tkinter`로 만든 Desktop 앱입니다. 화면 영역을 선택하고 주기적으로 캡처하며, 이미지가 변경될 때마다 OCR을 수행합니다.
 
-## How To Use
+## 설치 및 실행
 
-### 1. Install
+### 1. 설치
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Run
+### 2. 실행
 
 ```bash
 cd ocr_project
 python main.py
 ```
 
-### 3. Current Flow
+### 3. 사용 방법
 
-1. Click `Open Region Selector`.
-2. Drag to select the OCR region.
-3. The `Capture OCR Panel` starts monitoring that area every 2 seconds.
-4. OCR runs only when the captured image is different from the last frame, or when `Recognize Now` is pressed.
-5. The panel shows only the latest OCR result. Results are not accumulated.
-6. Click `Save` to store the current result in the local database.
-7. Open `Study List` to review saved results.
+1. `Open Region Selector` 클릭
+2. 마우스로 OCR 영역 드래그
+3. `Capture OCR Panel`이 2초마다 해당 영역 캡처
+4. 이미지가 변경되면 자동으로 OCR 수행, 또는 `Recognize Now` 수동 클릭
+5.Panel에 최신 OCR 결과만 표시
+6. `Save` 클릭하여 데이터베이스에 저장
+7. `Study List`로 저장된 결과 확인
 
-## Current Development Status
+## 주요 기능
 
-### Implemented
+- 영역 선택과 OCR 실행 분리
+- 캡처와 OCR 모듈 분리
+- 이미지 변경 감지 후 OCR 실행 (불필요한 반복 방지)
+- 수동 인식 (`Recognize Now`)
+- 원본 언어 선택 → 번역 언어 선택 번역 기능
+- SQLite 데이터베이스에 JSON 형식으로 저장
 
-- Region selection is separated from OCR execution.
-- Capture and OCR responsibilities are split into separate modules.
-- OCR runs after change detection instead of on every frame.
-- Manual recognition is available from the capture panel.
-- The app keeps only the latest OCR result in memory.
-- OCR language selection is available as a 2-language pair.
-- Save is user-driven and stores the current result to SQLite.
-- Each saved record includes a JSON payload with `time` and `content`.
+## 저장 형식
 
-### Current Save Format
-
-Saved OCR records keep plain text for list and search features, and also store a JSON payload in the database.
+저장된 OCR 기록은 일반 텍스트와 JSON 페이로드를 함께 저장합니다.
 
 ```json
 {
   "time": "2026-04-15T14:30:00",
-  "content": "recognized text"
+  "content": "인식된 텍스트"
 }
 ```
 
-## Current Structure
+## 폴더 구조
 
 ```text
 ocr_project/
@@ -59,7 +55,8 @@ ocr_project/
 |- CORE/
 |  |- db.py
 |  |- ocr_engine.py
-|  \- ocr_service.py
+|  |- ocr_service.py
+|  \- translation_service.py
 \- UI/
    |- capture_monitor.py
    |- selector.py
@@ -68,35 +65,32 @@ ocr_project/
    \- overlay.py
 ```
 
-## Design Notes
+## 디자인 notes
 
-- Screen capture is relatively cheap. OCR is the expensive step.
-- The current design avoids repeated OCR by checking whether the frame changed first.
-- Results are intentionally not accumulated. The user decides when the current OCR output should be saved.
-- The current language model strategy is a simple 2-language pair chosen by the user.
+- 화면 캡처는 상대적으로 빠름, OCR이 expensive한 작업
+- 이전 프레임과 비교하여 이미지 변경时才 OCR 실행
+- 결과는 누적되지 않고, 사용자가 저장할 때마다 최신 결과만 메모리에 유지
 
-## Known Limits
+## 현재 제한
 
-- OCR accuracy still depends heavily on ROI size, text size, contrast, and the selected language pair.
-- Very wide regions are slower and usually less accurate than narrow, focused regions.
-- `overlay.py` is still present in the repo, but the current main flow uses `capture_monitor.py` instead.
+- OCR 정확도는 영역 크기, 텍스트 크기, 대비, 선택한 언어 쌍에 따라 달라짐
+- 너무 넓은 영역은 느리고 정확도도 낮음
 
-## Next Development Items
+## 개발 예정
 
-### Short Term
+### 단기
 
-- Add OCR preprocessing such as upscale, grayscale, contrast, and threshold.
-- Expose capture interval and more OCR options in the UI.
-- Decide whether `overlay.py` should be removed entirely.
-- Improve save metadata if region or language history becomes important.
+- OCR 전처리 (拡大, 그레이스케일, 대비,_threshold)
+- 캡처 간격 및 OCR 옵션 UI 노출
+- 저장 메타데이터 개선
 
-### Mid Term
+### 중기
 
-- Add separate subtitle mode and document mode.
-- Compare OCR engines for better accuracy and memory usage.
-- Improve saved-result filtering and study workflows.
+- 자막 모드와 문서 모드 분리
+- OCR 엔진 비교
+- 결과 필터링 및 학습 워크플로우 개선
 
-### Long Term
+### 장기
 
-- Explore translation and summary workflows on top of OCR output.
-- Evaluate GPU or batch-oriented OCR if the app grows beyond small ROI capture.
+- OCR 결과 기반 번역 및 요약 워크플로우
+- GPU 또는_batch OCR 평가
