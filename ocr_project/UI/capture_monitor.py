@@ -1,3 +1,4 @@
+import importlib
 from typing import Callable, Optional, Tuple
 
 import tkinter as tk
@@ -10,8 +11,7 @@ except Exception:
     ImageGrab = None
 
 try:
-    import mss
-    MSS = mss
+    MSS = importlib.import_module("mss")
 except Exception:
     MSS = None
 
@@ -90,8 +90,6 @@ class CaptureMonitor:
             wraplength=390,
             justify="left",
         ).pack(anchor="w", padx=12, pady=(8, 0))
-
-        self.on_translate = None  # Callback for translation
 
         result_frame = tk.LabelFrame(
             self.win,
@@ -221,8 +219,8 @@ class CaptureMonitor:
         return "ko"
 
     def start(self) -> None:
-        if ImageGrab is None:
-            messagebox.showerror("Error", "Pillow ImageGrab is not available.")
+        if ImageGrab is None and MSS is None:
+            messagebox.showerror("Error", "No screen capture backend is available.")
             self.stop()
             return
 
@@ -373,6 +371,6 @@ def open_capture_monitor(
         on_frame=on_frame,
         on_save=on_save,
         on_stop=on_stop,
+        on_translate=on_translate,
     )
-    monitor.on_translate = on_translate
     return monitor
