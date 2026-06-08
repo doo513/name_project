@@ -22,6 +22,7 @@ wheels/
 
 # Virtual environments
 venv/
+.venv/
 ENV/
 env/
 
@@ -37,6 +38,8 @@ env/
 Thumbs.db
 
 # App-specific
+*.db
 ocr_project/CORE/ocr_study.db
+ocr_project/ocr_study.db
 ocr_project/UI/captures/
 ocr_project/ocr_study_app/
