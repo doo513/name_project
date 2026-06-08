@@ -63,7 +63,7 @@ class CaptureMonitor:
             panel_y = max(10, y1 - panel_height - 10)
 
         self.win = tk.Toplevel(self.parent)
-        self.win.title("Capture OCR Panel")
+        self.win.title("OCR 번역 패널")
         self.win.geometry(f"{panel_width}x{panel_height}+{panel_x}+{panel_y}")
         self.win.attributes("-topmost", True)
         self.win.configure(bg="#1a1a2e")
@@ -74,7 +74,7 @@ class CaptureMonitor:
         header.pack(fill="x")
         tk.Label(
             header,
-            text=f"OCR Capture - {width}x{height}",
+            text=f"OCR 번역 - {width}x{height}",
             fg="white",
             bg="#4B4FA6",
             font=("Segoe UI", 11, "bold"),
@@ -93,7 +93,7 @@ class CaptureMonitor:
 
         result_frame = tk.LabelFrame(
             self.win,
-            text="Output",
+            text="확정 OCR / 번역 결과",
             bg="#1a1a2e",
             fg="#00ff88",
             padx=8,
@@ -169,8 +169,8 @@ class CaptureMonitor:
 
         tk.Button(
             btn_row,
-            text="Translate",
-            width=8,
+            text="다시 번역",
+            width=10,
             command=self.request_translate,
             bg="#9b59b6",
             fg="white",
@@ -182,8 +182,8 @@ class CaptureMonitor:
 
         tk.Button(
             btn_row2,
-            text="Recognize Now",
-            width=12,
+            text="다시 인식",
+            width=10,
             command=self.request_capture_now,
             bg="#5E66F2",
             fg="white",
@@ -191,7 +191,7 @@ class CaptureMonitor:
         ).pack(side="left")
         tk.Button(
             btn_row2,
-            text="Save",
+            text="저장",
             width=8,
             command=self.request_save,
             bg="#2a9d5b",
@@ -200,8 +200,8 @@ class CaptureMonitor:
         ).pack(side="left", padx=(8, 0))
         tk.Button(
             btn_row,
-            text="Stop",
-            width=10,
+            text="중지",
+            width=8,
             command=self.stop,
             bg="#ff6b6b",
             fg="white",
@@ -280,7 +280,7 @@ class CaptureMonitor:
             self.set_status("Capture is stopped.")
             return
 
-        self.set_status("Manual recognition requested.")
+        self.set_status("다시 인식을 요청했습니다.")
         self._capture_once(force=True)
 
     def request_translate(self) -> None:
