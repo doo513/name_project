@@ -18,6 +18,7 @@ class DirectGradeResult:
     score: int
     normalized_answer: str
     ambiguity_reason: Optional[str] = None
+    reviewed_by_gemini: bool = False
 
     @property
     def is_ambiguous(self) -> bool:

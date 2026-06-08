@@ -52,8 +52,9 @@ class SolverRecordManager:
 
         if direct_result.is_ambiguous and gemini_fallback is not None:
             final_result = gemini_fallback(user_answer, problem, direct_result)
-            judged_by = "gemini"
-            gemini_used = True
+            if final_result.reviewed_by_gemini:
+                judged_by = "gemini"
+                gemini_used = True
 
         record_id = self.repository.record_attempt(
             session_id=session_id,
