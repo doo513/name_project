@@ -131,9 +131,9 @@ python main.py
 1. `Open Region Selector` 클릭
 2. 마우스로 OCR 영역 드래그
 3. 원본 언어, 번역 언어 선택
-4. `Recognize Now` 클릭
-5. `Translate` 클릭
-6. `Save` 클릭
+4. OCR 확정 결과 확인
+5. 필요하면 `다시 번역` 또는 `레이어 재설정` 사용
+6. `저장` 클릭
 
 ## 9. 업데이트 예정
 

@@ -8,8 +8,8 @@ Python tkinter로 만든 Desktop OCR 학습 앱입니다.
 2. `Open Region Selector` 클릭
 3. 마우스로 캡처 영역 드래그
 4. `Capture OCR Panel`에서 최신 OCR 결과 확인
-5. `Recognize Now`로 수동 OCR
-6. `Save` 클릭하여 데이터베이스에 저장
+5. 영역을 바꾸려면 `레이어 재설정`으로 OCR 영역을 다시 선택
+6. 확정된 OCR/번역 결과를 확인한 뒤 `저장` 클릭하여 데이터베이스에 저장
 
 ## 현재 구조
 
@@ -31,7 +31,7 @@ main.py
 - 2초 주기 캡처
 - 변경 감지 후 OCR
 - 사용자 선택 가능한 2개 언어 OCR 쌍
-- 수동 인식 버튼
+- 레이어 재설정 버튼으로 OCR 영역 재선택
 - 사용자触发 저장 플로우
 - SQLite 내 JSON 페이로드 저장
 - OCR → 번역 파이프라인 (deep-translator 기반)
