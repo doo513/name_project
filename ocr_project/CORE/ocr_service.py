@@ -1,5 +1,6 @@
-from typing import List, Optional
 from dataclasses import dataclass
+from statistics import median
+from typing import List, Sequence, Tuple
 
 try:
     import numpy as np
