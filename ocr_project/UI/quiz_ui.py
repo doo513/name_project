@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from CORE import db
+from CORE.app_settings import load_settings
+from CORE.gemini_service import grade_with_optional_gemini
 from CORE.study_logic import ProblemLoader, SolverRecordManager
 
 
@@ -121,13 +123,26 @@ class QuizWindow:
             messagebox.showerror("오류", "풀이 세션을 시작할 수 없습니다.")
             return
 
-        record = self.record_manager.submit_answer(self.session.id, int(current_problem["id"]), user_answer)
+        gemini_fallback = grade_with_optional_gemini if load_settings().gemini_enabled else None
+        record = self.record_manager.submit_answer(
+            self.session.id,
+            int(current_problem["id"]),
+            user_answer,
+            gemini_fallback=gemini_fallback,
+        )
         self.solved_count += 1
+        source = "Gemini 검토" if record.judged_by == "gemini" else "기본 채점"
+        feedback = f"\n피드백: {record.feedback}" if record.feedback else ""
         if record.final_status == "correct":
             self.correct_count += 1
-            self.result_var.set(f"정답입니다. 점수: {record.final_score}")
+            self.result_var.set(f"정답입니다. 점수: {record.final_score}\n판정: {source}{feedback}")
+        elif record.final_status == "ambiguous":
+            self.result_var.set(
+                f"애매한 답변입니다. 점수: {record.final_score}\n"
+                f"판정: {source}{feedback}\n정답 예시: {expected}"
+            )
         else:
-            self.result_var.set(f"오답입니다. 점수: {record.final_score}\n정답: {expected}")
+            self.result_var.set(f"오답입니다. 점수: {record.final_score}\n판정: {source}{feedback}\n정답: {expected}")
 
         self.progress_label.config(
             text=f"{self.current_index + 1} / {len(self.quiz_items)} | 정답 {self.correct_count}/{self.solved_count}"

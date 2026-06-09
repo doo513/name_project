@@ -29,6 +29,7 @@ class CaptureMonitor:
         on_save: Optional[Callable[[], None]] = None,
         on_stop: Optional[Callable[[], None]] = None,
         on_translate: Optional[Callable[[], None]] = None,
+        on_reselect: Optional[Callable[[Region], None]] = None,
     ) -> None:
         self.parent = parent
         self.region = region
@@ -37,10 +38,12 @@ class CaptureMonitor:
         self.on_save = on_save
         self.on_stop = on_stop
         self.on_translate = on_translate
+        self.on_reselect = on_reselect
 
         self.active = False
         self.capture_job = None
         self._stopped = False
+        self._reselecting = False
         self.outline_windows = []
 
         self._build_window()
@@ -63,7 +66,7 @@ class CaptureMonitor:
             panel_y = max(10, y1 - panel_height - 10)
 
         self.win = tk.Toplevel(self.parent)
-        self.win.title("Capture OCR Panel")
+        self.win.title("OCR 번역 패널")
         self.win.geometry(f"{panel_width}x{panel_height}+{panel_x}+{panel_y}")
         self.win.attributes("-topmost", True)
         self.win.configure(bg="#1a1a2e")
@@ -74,7 +77,7 @@ class CaptureMonitor:
         header.pack(fill="x")
         tk.Label(
             header,
-            text=f"OCR Capture - {width}x{height}",
+            text=f"OCR 번역 - {width}x{height}",
             fg="white",
             bg="#4B4FA6",
             font=("Segoe UI", 11, "bold"),
@@ -93,7 +96,7 @@ class CaptureMonitor:
 
         result_frame = tk.LabelFrame(
             self.win,
-            text="Output",
+            text="확정 OCR / 번역 결과",
             bg="#1a1a2e",
             fg="#00ff88",
             padx=8,
@@ -169,8 +172,8 @@ class CaptureMonitor:
 
         tk.Button(
             btn_row,
-            text="Translate",
-            width=8,
+            text="다시 번역",
+            width=10,
             command=self.request_translate,
             bg="#9b59b6",
             fg="white",
@@ -182,16 +185,16 @@ class CaptureMonitor:
 
         tk.Button(
             btn_row2,
-            text="Recognize Now",
+            text="레이어 재설정",
             width=12,
-            command=self.request_capture_now,
+            command=self.request_reselect_area,
             bg="#5E66F2",
             fg="white",
             font=("Segoe UI", 9, "bold"),
         ).pack(side="left")
         tk.Button(
             btn_row2,
-            text="Save",
+            text="저장",
             width=8,
             command=self.request_save,
             bg="#2a9d5b",
@@ -200,8 +203,8 @@ class CaptureMonitor:
         ).pack(side="left", padx=(8, 0))
         tk.Button(
             btn_row,
-            text="Stop",
-            width=10,
+            text="중지",
+            width=8,
             command=self.stop,
             bg="#ff6b6b",
             fg="white",
@@ -275,13 +278,58 @@ class CaptureMonitor:
 
         return None
 
-    def request_capture_now(self) -> None:
-        if not self.active:
+    def request_reselect_area(self) -> None:
+        if not self.active and not self._reselecting:
             self.set_status("Capture is stopped.")
             return
 
-        self.set_status("Manual recognition requested.")
-        self._capture_once(force=True)
+        self.set_status("레이어 재설정을 위해 영역 선택을 다시 엽니다.")
+        self._pause_for_reselect()
+
+        try:
+            from UI.selector import open_selector_window
+        except ImportError as exc:
+            self._resume_after_reselect_cancelled()
+            messagebox.showerror("Error", f"Failed to load region selector.\n{exc}")
+            return
+
+        open_selector_window(
+            self.parent,
+            on_selected=self._on_region_reselected,
+            on_cancel=self._resume_after_reselect_cancelled,
+        )
+
+    def _pause_for_reselect(self) -> None:
+        self._reselecting = True
+        self.active = False
+        if self.capture_job:
+            self.parent.after_cancel(self.capture_job)
+            self.capture_job = None
+        self._destroy_region_outline()
+        if getattr(self, "win", None) and self.win.winfo_exists():
+            self.win.withdraw()
+
+    def _resume_after_reselect_cancelled(self) -> None:
+        if self._stopped:
+            return
+        self._reselecting = False
+        if getattr(self, "win", None) and self.win.winfo_exists():
+            self.win.deiconify()
+            self.win.lift()
+        self.start()
+        self.set_status("레이어 재설정이 취소되어 기존 영역 캡처를 계속합니다.")
+
+    def _on_region_reselected(self, region: Region) -> None:
+        self._reselecting = False
+        if callable(self.on_reselect):
+            self.on_reselect(region)
+            return
+
+        self.stop(notify=False)
+        self.region = region
+        self._stopped = False
+        self._build_window()
+        self.start()
 
     def request_translate(self) -> None:
         if callable(self.on_translate):
@@ -363,6 +411,7 @@ def open_capture_monitor(
     on_save: Optional[Callable[[], None]] = None,
     on_stop: Optional[Callable[[], None]] = None,
     on_translate: Optional[Callable[[], None]] = None,
+    on_reselect: Optional[Callable[[Region], None]] = None,
 ) -> CaptureMonitor:
     monitor = CaptureMonitor(
         parent,
@@ -372,5 +421,6 @@ def open_capture_monitor(
         on_save=on_save,
         on_stop=on_stop,
         on_translate=on_translate,
+        on_reselect=on_reselect,
     )
     return monitor

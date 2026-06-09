@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from CORE import db
+from CORE.app_settings import AppSettings, load_settings
 from CORE.ocr_stabilizer import OCRStabilizer, StabilizerConfig
 from CORE.ocr_service import OCRService
 from CORE.translation_service import TranslationService
@@ -51,6 +52,7 @@ class MainApp:
         self.root.geometry("700x600")
         self.root.resizable(True, True)
         self.root.minsize(500, 400)
+        self.settings = load_settings()
 
         self.capture_interval_seconds = 2.0
         self.capture_padding_pixels = 8
@@ -65,10 +67,8 @@ class MainApp:
         self.confirmed_target_language: Optional[str] = None
 
         self.candidate_hold_job: Optional[str] = None
-        self.candidate_hold_milliseconds = 2000
-        self.ocr_stabilizer = OCRStabilizer(
-            StabilizerConfig(required_matches=2, similarity_threshold=0.92)
-        )
+        self.candidate_hold_milliseconds = int(self.settings.ocr_hold_seconds * 1000)
+        self.ocr_stabilizer = self._build_ocr_stabilizer(self.settings)
 
         self.capture_session_id = 0
         self.ocr_in_flight = False
@@ -104,11 +104,10 @@ class MainApp:
 
         btn_style = {"font": ("Segoe UI", 10, "bold"), "fg": "white", "relief": "flat", "height": 2, "cursor": "hand2"}
 
-        tk.Button(self.root, text="Open Region Selector", bg="#5E66F2", command=self.open_selector, **btn_style).pack(padx=30, fill="x", pady=5)
-        tk.Button(self.root, text="Open Overlay", bg="#6B7FF2", command=self.open_capture_panel, **btn_style).pack(padx=30, fill="x", pady=5)
-        tk.Button(self.root, text="Open Study List", bg="#99A6F2", command=self.open_study_list, **btn_style).pack(padx=30, fill="x", pady=5)
-        tk.Button(self.root, text="Open Quiz", bg="#8AA0F2", command=self.open_quiz, **btn_style).pack(padx=30, fill="x", pady=5)
-        tk.Button(self.root, text="Open Test UI", bg="#B3BDF2", command=self.open_test_ui, **btn_style).pack(padx=30, fill="x", pady=5)
+        tk.Button(self.root, text="OCR 번역 시작", bg="#5E66F2", command=self.open_selector, **btn_style).pack(padx=30, fill="x", pady=5)
+        tk.Button(self.root, text="퀴즈 풀기", bg="#8AA0F2", command=self.open_quiz, **btn_style).pack(padx=30, fill="x", pady=5)
+        tk.Button(self.root, text="저장 기록 보기", bg="#99A6F2", command=self.open_study_list, **btn_style).pack(padx=30, fill="x", pady=5)
+        tk.Button(self.root, text="설정", bg="#6B7FF2", command=self.open_settings, **btn_style).pack(padx=30, fill="x", pady=5)
 
     def _build_language_controls(self) -> None:
         frame = tk.Frame(self.root, bg="white")
@@ -150,6 +149,24 @@ class MainApp:
         if self.capture_monitor is not None:
             return [self.capture_monitor.get_source_lang(), self.capture_monitor.get_translate_target()]
         return [self.source_lang_var.get(), self.translate_target_var.get()]
+
+    def _build_ocr_stabilizer(self, settings: AppSettings) -> OCRStabilizer:
+        return OCRStabilizer(
+            StabilizerConfig(
+                required_matches=settings.ocr_recheck_count,
+                similarity_threshold=settings.ocr_similarity_threshold,
+            )
+        )
+
+    def _apply_settings(self, settings: AppSettings) -> None:
+        self.settings = settings
+        self.candidate_hold_milliseconds = int(settings.ocr_hold_seconds * 1000)
+        self._reset_candidate_state(cancel_timer=True)
+        self.ocr_stabilizer = self._build_ocr_stabilizer(settings)
+        self._set_capture_status(
+            f"Settings applied: OCR confirmation uses {settings.ocr_recheck_count} sample(s), "
+            f"{settings.ocr_hold_seconds:.1f}s hold."
+        )
 
     def _on_region_selected(self, region: Region) -> None:
         monitored_region = self._expand_capture_region(region)
@@ -203,6 +220,7 @@ class MainApp:
             on_save=self._save_current_result,
             on_stop=self._on_capture_stopped,
             on_translate=self._on_translate_pressed,
+            on_reselect=self._on_region_selected,
         )
         self.capture_monitor.start()
         self.capture_monitor.set_result_text("Waiting for OCR result...")
@@ -538,13 +556,6 @@ class MainApp:
         except Exception as exc:
             messagebox.showerror("Error", f"Failed to open selector window.\n{exc}")
 
-    def open_capture_panel(self) -> None:
-        if self.capture_monitor is None:
-            messagebox.showinfo("Notice", "Open Region Selector first to start capture.")
-            return
-
-        self.capture_monitor.focus_panel()
-
     def open_study_list(self) -> None:
         try:
             from UI.study_list import open_study_list_window
@@ -555,15 +566,15 @@ class MainApp:
         except Exception as exc:
             messagebox.showerror("Error", f"Failed to open study list window.\n{exc}")
 
-    def open_test_ui(self) -> None:
+    def open_settings(self) -> None:
         try:
-            from UI.test_ui import open_test_window
+            from UI.settings_ui import open_settings_window
 
-            open_test_window(self.root)
+            open_settings_window(self.root, on_saved=self._apply_settings)
         except ImportError:
-            self._open_placeholder("Test UI", "test_ui.py or open_test_window is missing.")
+            self._open_placeholder("Settings", "settings_ui.py or open_settings_window is missing.")
         except Exception as exc:
-            messagebox.showerror("Error", f"Failed to open test window.\n{exc}")
+            messagebox.showerror("Error", f"Failed to open settings window.\n{exc}")
 
     def open_quiz(self) -> None:
         try:

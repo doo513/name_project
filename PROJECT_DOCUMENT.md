@@ -8,7 +8,7 @@ Python tkinter로 만든 Desktop OCR 앱입니다. 화면 영역을 선택하고
 
 ```
 ocr_project/
-├── main.py                    # Main Window + OCR/언어 선택
+├── main.py                    # 메인 창 + OCR/언어 선택
 ├── CORE/
 │   ├── ocr_engine.py        # EasyOCR 래핑
 │   ├── ocr_service.py       # OCR 실행 + 결과 정리
@@ -16,7 +16,7 @@ ocr_project/
 │   └── db.py                # SQLite 저장
 └── UI/
     ├── selector.py          # 영역 선택 (마우스 드래그)
-    ├── capture_monitor.py  # Panel - 주기적 캡처 + 버튼
+    ├── capture_monitor.py  # OCR 번역 패널 - 주기적 캡처 + 버튼
     ├── study_list.py     # 저장된 결과 목록
     ├── test_ui.py      # 테스트용
     └── overlay.py     # 오버레이
@@ -25,20 +25,20 @@ ocr_project/
 ## 3. 작동 방식
 
 ```
-1. Open Region Selector
+1. `OCR 번역 시작` 클릭
    └─ 마우스로 영역 드래그
 
-2. Panel 열림 (2초마다 캡처)
+2. `OCR 번역 패널` 열림 (2초마다 캡처)
    └─ 이미지 변경 감지 → OCR 실행
 
 3. OCR (ocr_service.py)
    └─ EasyOCR → 결과 정리 (clean_ocr_text)
 
-4. Translate 버튼
-   └─ 원본 → 번역 (deep-translator)
+4. `다시 번역` 버튼
+   └─ 확정 OCR 원문을 선택한 목표 언어로 다시 번역
 
-5. Save 버튼
-   └─ SQLite에 JSON 저장
+5. `레이어 재설정` 또는 `저장` 버튼
+   └─ 영역을 다시 선택하거나 확정 OCR/번역 결과를 SQLite에 저장
 ```
 
 ## 4. 주요 기능
@@ -128,12 +128,12 @@ python main.py
 ```
 
 ### 사용 흐름
-1. `Open Region Selector` 클릭
+1. `OCR 번역 시작` 클릭
 2. 마우스로 OCR 영역 드래그
 3. 원본 언어, 번역 언어 선택
-4. `Recognize Now` 클릭
-5. `Translate` 클릭
-6. `Save` 클릭
+4. OCR 확정 결과 확인
+5. 필요하면 `다시 번역` 또는 `레이어 재설정` 사용
+6. `저장` 클릭
 
 ## 9. 업데이트 예정
 
