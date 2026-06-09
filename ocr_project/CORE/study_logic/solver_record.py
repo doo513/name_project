@@ -23,6 +23,7 @@ class AttemptRecord:
     final_status: str
     final_score: int
     judged_by: str
+    feedback: Optional[str] = None
 
 
 class SolverRecordManager:
@@ -71,7 +72,15 @@ class SolverRecordManager:
             final_score=final_result.score,
             judged_by=judged_by,
         )
-        return AttemptRecord(record_id, session_id, problem_id, final_result.status, final_result.score, judged_by)
+        return AttemptRecord(
+            record_id,
+            session_id,
+            problem_id,
+            final_result.status,
+            final_result.score,
+            judged_by,
+            final_result.ambiguity_reason,
+        )
 
     def finish_session(self, session_id: int) -> None:
         self.repository.finish_attempt_session(session_id)

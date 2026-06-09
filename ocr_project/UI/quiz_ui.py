@@ -131,19 +131,18 @@ class QuizWindow:
             gemini_fallback=gemini_fallback,
         )
         self.solved_count += 1
+        source = "Gemini 검토" if record.judged_by == "gemini" else "기본 채점"
+        feedback = f"\n피드백: {record.feedback}" if record.feedback else ""
         if record.final_status == "correct":
             self.correct_count += 1
-            source = "Gemini 검토" if record.judged_by == "gemini" else "기본 채점"
-            self.result_var.set(f"정답입니다. 점수: {record.final_score}\n판정: {source}")
+            self.result_var.set(f"정답입니다. 점수: {record.final_score}\n판정: {source}{feedback}")
         elif record.final_status == "ambiguous":
-            source = "Gemini 검토" if record.judged_by == "gemini" else "기본 채점"
             self.result_var.set(
                 f"애매한 답변입니다. 점수: {record.final_score}\n"
-                f"판정: {source}\n정답 예시: {expected}"
+                f"판정: {source}{feedback}\n정답 예시: {expected}"
             )
         else:
-            source = "Gemini 검토" if record.judged_by == "gemini" else "기본 채점"
-            self.result_var.set(f"오답입니다. 점수: {record.final_score}\n판정: {source}\n정답: {expected}")
+            self.result_var.set(f"오답입니다. 점수: {record.final_score}\n판정: {source}{feedback}\n정답: {expected}")
 
         self.progress_label.config(
             text=f"{self.current_index + 1} / {len(self.quiz_items)} | 정답 {self.correct_count}/{self.solved_count}"
