@@ -8,10 +8,12 @@ Region = Tuple[int, int, int, int]
 
 
 class RegionSelectorWindow:
-    def __init__(self, parent: tk.Misc, on_selected=None) -> None:
+    def __init__(self, parent: tk.Misc, on_selected=None, on_cancel=None) -> None:
         self.parent = parent
         self.on_selected = on_selected
+        self.on_cancel = on_cancel
         self.selected_region: Optional[Region] = None
+        self._confirmed = False
         self.rect_id = None
         self.start_x = 0
         self.start_y = 0
@@ -139,6 +141,7 @@ class RegionSelectorWindow:
             return
 
         region = self.selected_region
+        self._confirmed = True
         self.close()
 
         if callable(self.on_selected):
@@ -147,7 +150,9 @@ class RegionSelectorWindow:
     def close(self) -> None:
         if getattr(self, "selection_win", None) and self.selection_win.winfo_exists():
             self.selection_win.destroy()
+        if not self._confirmed and callable(self.on_cancel):
+            self.on_cancel()
 
 
-def open_selector_window(parent: tk.Misc, on_selected=None) -> RegionSelectorWindow:
-    return RegionSelectorWindow(parent, on_selected=on_selected)
+def open_selector_window(parent: tk.Misc, on_selected=None, on_cancel=None) -> RegionSelectorWindow:
+    return RegionSelectorWindow(parent, on_selected=on_selected, on_cancel=on_cancel)
