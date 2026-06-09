@@ -25,6 +25,8 @@ class CaptureMonitor:
         parent: tk.Misc,
         region: Region,
         interval_seconds: float = 2.0,
+        source_lang: str = "en",
+        target_lang: str = "ko",
         on_frame: Optional[Callable[[Region, object, bool], None]] = None,
         on_save: Optional[Callable[[], None]] = None,
         on_stop: Optional[Callable[[], None]] = None,
@@ -34,6 +36,8 @@ class CaptureMonitor:
         self.parent = parent
         self.region = region
         self.interval_seconds = interval_seconds
+        self.source_lang = source_lang
+        self.target_lang = target_lang
         self.on_frame = on_frame
         self.on_save = on_save
         self.on_stop = on_stop
@@ -57,7 +61,7 @@ class CaptureMonitor:
         screen_height = self.parent.winfo_screenheight()
 
         panel_width = 480
-        panel_height = 450
+        panel_height = 620
         panel_x = min(max(10, x1), max(10, screen_width - panel_width - 10))
 
         if y2 + 10 + panel_height <= screen_height:
@@ -70,8 +74,9 @@ class CaptureMonitor:
         self.win.geometry(f"{panel_width}x{panel_height}+{panel_x}+{panel_y}")
         self.win.attributes("-topmost", True)
         self.win.configure(bg="#1a1a2e")
-        self.win.minsize(350, 280)
+        self.win.minsize(480, 560)
         self.win.protocol("WM_DELETE_WINDOW", self.stop)
+        self.win.bind("<Configure>", self._on_window_resized)
 
         header = tk.Frame(self.win, bg="#4B4FA6", height=40)
         header.pack(fill="x")
@@ -84,7 +89,7 @@ class CaptureMonitor:
         ).pack(pady=8)
 
         self.status_var = tk.StringVar(value="Ready to capture.")
-        tk.Label(
+        self.status_label = tk.Label(
             self.win,
             textvariable=self.status_var,
             fg="#00ff88",
@@ -92,39 +97,11 @@ class CaptureMonitor:
             font=("Segoe UI", 9),
             wraplength=390,
             justify="left",
-        ).pack(anchor="w", padx=12, pady=(8, 0))
-
-        result_frame = tk.LabelFrame(
-            self.win,
-            text="확정 OCR / 번역 결과",
-            bg="#1a1a2e",
-            fg="#00ff88",
-            padx=8,
-            pady=8,
         )
-        result_frame.pack(fill="both", expand=True, padx=12, pady=(10, 8))
-
-        scrollbar = tk.Scrollbar(result_frame)
-        scrollbar.pack(side="right", fill="y")
-
-        self.result_text = tk.Text(
-            result_frame,
-            wrap="word",
-            font=("Consolas", 10),
-            bg="#111111",
-            fg="#00ff88",
-            insertbackground="#ffffff",
-            relief="flat",
-            padx=8,
-            pady=8,
-            yscrollcommand=scrollbar.set,
-        )
-        self.result_text.pack(fill="both", expand=True)
-        scrollbar.config(command=self.result_text.yview)
-        self.result_text.insert("1.0", "Waiting for OCR result...")
+        self.status_label.pack(anchor="w", padx=12, pady=(8, 0), fill="x")
 
         btn_row = tk.Frame(self.win, bg="#1a1a2e")
-        btn_row.pack(fill="x", padx=12, pady=(8, 0))
+        btn_row.pack(side="bottom", fill="x", padx=12, pady=(4, 0))
 
         tk.Label(
             btn_row,
@@ -134,7 +111,7 @@ class CaptureMonitor:
             font=("Segoe UI", 9),
         ).pack(side="left", padx=(0, 4))
 
-        self.source_lang_var = tk.StringVar(value="en")
+        self.source_lang_var = tk.StringVar(value=self.source_lang)
         source_combo = ttk.Combobox(
             btn_row,
             textvariable=self.source_lang_var,
@@ -160,7 +137,7 @@ class CaptureMonitor:
             font=("Segoe UI", 9),
         ).pack(side="left", padx=(0, 4))
 
-        self.translate_target_var = tk.StringVar(value="ko")
+        self.translate_target_var = tk.StringVar(value=self.target_lang)
         target_combo = ttk.Combobox(
             btn_row,
             textvariable=self.translate_target_var,
@@ -181,7 +158,7 @@ class CaptureMonitor:
         ).pack(side="left", padx=(4, 0))
 
         btn_row2 = tk.Frame(self.win, bg="#1a1a2e")
-        btn_row2.pack(fill="x", padx=12, pady=(8, 12))
+        btn_row2.pack(side="bottom", fill="x", padx=12, pady=(4, 12))
 
         tk.Button(
             btn_row2,
@@ -211,6 +188,35 @@ class CaptureMonitor:
             font=("Segoe UI", 9, "bold"),
         ).pack(side="right")
 
+        result_frame = tk.LabelFrame(
+            self.win,
+            text="확정 OCR / 번역 결과",
+            bg="#1a1a2e",
+            fg="#00ff88",
+            padx=8,
+            pady=8,
+        )
+        result_frame.pack(fill="both", expand=True, padx=12, pady=(10, 4))
+
+        scrollbar = tk.Scrollbar(result_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        self.result_text = tk.Text(
+            result_frame,
+            wrap="word",
+            font=("Consolas", 10),
+            bg="#111111",
+            fg="#00ff88",
+            insertbackground="#ffffff",
+            relief="flat",
+            padx=8,
+            pady=8,
+            yscrollcommand=scrollbar.set,
+        )
+        self.result_text.pack(fill="both", expand=True)
+        scrollbar.config(command=self.result_text.yview)
+        self.result_text.insert("1.0", "Waiting for OCR result...")
+
     def get_source_lang(self) -> str:
         if hasattr(self, 'source_lang_var'):
             return self.source_lang_var.get()
@@ -220,6 +226,11 @@ class CaptureMonitor:
         if hasattr(self, 'translate_target_var'):
             return self.translate_target_var.get()
         return "ko"
+
+    def _on_window_resized(self, _event=None) -> None:
+        width = max(320, self.win.winfo_width() - 90)
+        self.result_text.configure(width=max(40, width // 8))
+        self.status_label.configure(wraplength=width)
 
     def start(self) -> None:
         if ImageGrab is None and MSS is None:
@@ -407,6 +418,8 @@ def open_capture_monitor(
     parent: tk.Misc,
     region: Region,
     interval_seconds: float = 2.0,
+    source_lang: str = "en",
+    target_lang: str = "ko",
     on_frame: Optional[Callable[[Region, object, bool], None]] = None,
     on_save: Optional[Callable[[], None]] = None,
     on_stop: Optional[Callable[[], None]] = None,
@@ -417,6 +430,8 @@ def open_capture_monitor(
         parent,
         region=region,
         interval_seconds=interval_seconds,
+        source_lang=source_lang,
+        target_lang=target_lang,
         on_frame=on_frame,
         on_save=on_save,
         on_stop=on_stop,
