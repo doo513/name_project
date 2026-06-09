@@ -7,6 +7,8 @@ from .study_logic.answer_criteria import DirectGradeResult
 
 
 class GeminiService:
+    RETRY_STATUS_CODES = [408, 429, 500, 502, 503, 504]
+
     def __init__(self, api_key: Optional[str] = None) -> None:
         self.api_key = (api_key if api_key is not None else load_settings().gemini_api_key).strip()
 
@@ -34,18 +36,19 @@ class GeminiService:
             )
 
         try:
-            client = genai.Client(api_key=self.api_key)
+            client = self._create_client(genai)
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=self._build_grading_prompt(user_answer, problem, direct_result),
             )
             return self._parse_response(getattr(response, "text", ""), direct_result)
         except Exception as exc:
+            message = self._format_failure_message(exc)
             return DirectGradeResult(
                 direct_result.status,
                 direct_result.score,
                 direct_result.normalized_answer,
-                f"Gemini grading failed: {exc}",
+                message,
                 reviewed_by_gemini=False,
             )
 
@@ -59,16 +62,56 @@ class GeminiService:
             return "google-genai 패키지가 설치되어 있지 않습니다. requirements.txt 설치 후 다시 시도해 주세요."
 
         try:
-            client = genai.Client(api_key=self.api_key)
+            client = self._create_client(genai)
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents="Reply with OK if this Gemini API key can be used.",
             )
             text = (getattr(response, "text", "") or "").strip()
         except Exception as exc:
-            return f"Gemini 연결 실패: {exc}"
+            if self._is_transient_error(exc):
+                return "Gemini가 일시적으로 불안정합니다. 잠시 후 다시 시도해 주세요. API 없이도 기본 채점은 계속 사용할 수 있습니다."
+            return "Gemini 연결에 실패했습니다. API 키와 네트워크 상태를 확인해 주세요. API 없이도 기본 채점은 계속 사용할 수 있습니다."
 
         return f"Gemini 연결 성공: {text or 'OK'}"
+
+    def _create_client(self, genai):
+        try:
+            types = importlib.import_module("google.genai.types")
+            retry_options = types.HttpRetryOptions(
+                attempts=3,
+                initial_delay=1.0,
+                max_delay=8.0,
+                http_status_codes=self.RETRY_STATUS_CODES,
+            )
+            http_options = types.HttpOptions(retry_options=retry_options)
+            return genai.Client(api_key=self.api_key, http_options=http_options)
+        except Exception:
+            return genai.Client(api_key=self.api_key)
+
+    def _format_failure_message(self, exc: Exception) -> str:
+        if self._is_transient_error(exc):
+            return "Gemini가 일시적으로 응답하지 않아 기본 채점 결과를 사용했습니다. 잠시 후 다시 시도하면 Gemini 검토를 받을 수 있습니다."
+        return "Gemini 검토를 완료하지 못해 기본 채점 결과를 사용했습니다. API 키와 네트워크 상태를 확인해 주세요."
+
+    def _is_transient_error(self, exc: Exception) -> bool:
+        code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+        if code in {408, 429, 500, 502, 503, 504}:
+            return True
+
+        message = str(exc).lower()
+        return any(
+            token in message
+            for token in (
+                "503",
+                "unavailable",
+                "overloaded",
+                "timeout",
+                "timed out",
+                "connecterror",
+                "temporarily",
+            )
+        )
 
     def _build_grading_prompt(
         self,
@@ -97,8 +140,8 @@ class GeminiService:
                 direct_result.status,
                 direct_result.score,
                 direct_result.normalized_answer,
-                f"Gemini returned an unreadable response: {text[:200]}",
-                reviewed_by_gemini=True,
+                "Gemini 응답을 해석할 수 없어 기본 채점 결과를 사용했습니다.",
+                reviewed_by_gemini=False,
             )
 
         status = str(payload.get("status") or direct_result.status).strip().lower()
