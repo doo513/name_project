@@ -12,22 +12,17 @@ from CORE.app_settings import AppSettings, load_settings
 from CORE.ocr_stabilizer import OCRStabilizer, StabilizerConfig
 from CORE.ocr_service import OCRService
 from CORE.translation_service import TranslationService
+from CORE.language_config import (
+    DEFAULT_SOURCE_LANGUAGE,
+    DEFAULT_TARGET_LANGUAGE,
+    LANGUAGE_CODES,
+    get_language_name,
+    get_ocr_languages,
+    get_translation_language,
+)
 
 
 Region = Tuple[int, int, int, int]
-LANGUAGE_OPTIONS = [
-    ("Korean", "ko"),
-    ("English", "en"),
-    ("Japanese", "ja"),
-    ("Chinese Simplified", "ch_sim"),
-    ("Chinese Traditional", "ch_tra"),
-    ("Spanish", "es"),
-    ("French", "fr"),
-    ("German", "de"),
-    ("Russian", "ru"),
-    ("Arabic", "ar"),
-]
-LANGUAGE_CODE_TO_NAME = {code: name for name, code in LANGUAGE_OPTIONS}
 
 
 def _enable_windows_dpi_awareness() -> None:
@@ -78,7 +73,7 @@ class MainApp:
         self.translation_failed = False
         self.translation_request_id = 0
         self.ui_queue: queue.Queue = queue.Queue()
-        self.translate_target_var = tk.StringVar(value="ko")
+        self.translate_target_var = tk.StringVar(value=DEFAULT_TARGET_LANGUAGE)
 
         self._build_ui()
         self._poll_ui_queue()
@@ -115,12 +110,12 @@ class MainApp:
         
         tk.Label(frame, text="원본:", font=("Segoe UI", 9, "bold"), bg="white", fg="#65676B").pack(side="left", padx=(0, 5))
         
-        self.source_lang_var = tk.StringVar(value="en")
+        self.source_lang_var = tk.StringVar(value=DEFAULT_SOURCE_LANGUAGE)
         
         self.source_lang_combo = ttk.Combobox(
             frame,
             textvariable=self.source_lang_var,
-            values=["ko", "en", "ja", "zh", "es", "fr", "de", "ru", "ar"],
+            values=LANGUAGE_CODES,
             state="readonly",
             width=8,
         )
@@ -130,25 +125,28 @@ class MainApp:
         
         tk.Label(frame, text="번역:", font=("Segoe UI", 9, "bold"), bg="white", fg="#65676B").pack(side="left", padx=(0, 5))
         
-        self.translate_target_var = tk.StringVar(value="ko")
+        self.translate_target_var = tk.StringVar(value=DEFAULT_TARGET_LANGUAGE)
         
         self.translate_target_combo = ttk.Combobox(
             frame,
             textvariable=self.translate_target_var,
-            values=["ko", "en", "ja", "zh", "es", "fr", "de", "ru", "ar"],
+            values=LANGUAGE_CODES,
             state="readonly",
             width=8,
         )
         self.translate_target_combo.pack(side="left")
 
     def _get_language_display(self, code: str) -> str:
-        name = LANGUAGE_CODE_TO_NAME.get(code, code.upper())
-        return f"{name}"
+        return get_language_name(code)
 
-    def _get_selected_language_codes(self) -> List[str]:
-        if self.capture_monitor is not None:
-            return [self.capture_monitor.get_source_lang(), self.capture_monitor.get_translate_target()]
-        return [self.source_lang_var.get(), self.translate_target_var.get()]
+    def _get_selected_ocr_languages(self) -> List[str]:
+        return get_ocr_languages(self._get_current_source_language())
+
+    def _get_current_translation_source_language(self) -> str:
+        return get_translation_language(self._get_current_source_language())
+
+    def _get_current_translation_target_language(self) -> str:
+        return get_translation_language(self._get_current_target_language())
 
     def _build_ocr_stabilizer(self, settings: AppSettings) -> OCRStabilizer:
         return OCRStabilizer(
@@ -206,11 +204,13 @@ class MainApp:
             return
 
         session_id = self.capture_session_id
-        self.translation_service = TranslationService(target=self.translate_target_var.get())
-        self.capture_monitor = open_capture_monitor(
+        self.translation_service = TranslationService(target=self._get_current_translation_target_language())
+        monitor = open_capture_monitor(
             self.root,
             region=region,
             interval_seconds=self.capture_interval_seconds,
+            source_lang=self._get_current_source_language(),
+            target_lang=self._get_current_target_language(),
             on_frame=lambda selected_region, image, force: self._on_capture_frame(
                 session_id,
                 selected_region,
@@ -222,9 +222,27 @@ class MainApp:
             on_translate=self._on_translate_pressed,
             on_reselect=self._on_region_selected,
         )
-        self.capture_monitor.start()
-        self.capture_monitor.set_result_text("Waiting for OCR result...")
-        self.capture_monitor.focus_panel()
+        if monitor is None:
+            self._set_capture_status("Capture monitor failed to initialize.")
+            self.root.deiconify()
+            return
+
+        self.capture_monitor = monitor
+        monitor.set_result_text("Waiting for OCR result...")
+        monitor.focus_panel()
+
+        started = monitor.start()
+        if started is False:
+            if self.capture_monitor is monitor:
+                self.capture_monitor = None
+            backend_error = getattr(monitor, "last_capture_error", None)
+            if backend_error:
+                self._set_capture_status(f"Capture failed: {backend_error}")
+            else:
+                self._set_capture_status("Capture failed: no available screen capture backend.")
+            if self.root.winfo_exists():
+                self.root.deiconify()
+                self.root.lift()
 
     def _on_capture_frame(self, session_id: int, region: Region, image, force: bool = False) -> None:
         if session_id != self.capture_session_id:
@@ -250,12 +268,14 @@ class MainApp:
         self._start_ocr_worker(session_id, region, image)
 
     def _start_ocr_worker(self, session_id: int, region: Region, image) -> None:
-        selected_languages = self._get_selected_language_codes()
-        self.ocr_service.set_languages(selected_languages)
+        ocr_languages = self._get_selected_ocr_languages()
+        source_language = self._get_current_source_language()
+        self.ocr_service.set_languages(ocr_languages)
         self.ocr_in_flight = True
-        self._set_capture_status("Running OCR on the selected region...")
+        ocr_lang_text = ", ".join(ocr_languages)
+        self._set_capture_status(f"Running OCR on the selected region... OCR backend languages: [{ocr_lang_text}]")
         if self.capture_monitor is not None:
-            self.capture_monitor.set_status("Running OCR...")
+            self.capture_monitor.set_status(f"Running OCR... [{ocr_lang_text}]")
 
         def worker() -> None:
             try:
@@ -265,7 +285,7 @@ class MainApp:
                 result = []
                 error = str(exc)
 
-            self._enqueue_ui(lambda: self._on_ocr_complete(session_id, region, result, error, selected_languages))
+            self._enqueue_ui(lambda: self._on_ocr_complete(session_id, region, result, error, [source_language]))
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -311,7 +331,7 @@ class MainApp:
             return
 
         content = "\n".join(self.ocr_text).strip()
-        tags = ",".join(self.last_result_languages or self._get_selected_language_codes())
+        tags = ",".join(self.last_result_languages or [self._get_current_source_language()])
         translated = self.translated_text
         if self.translation_in_flight:
             messagebox.showwarning("Notice", "Translation is still running. Please save after translation completes.")
@@ -327,7 +347,7 @@ class MainApp:
                 tags=tags,
                 translation=translated,
                 source_language=self.confirmed_source_language,
-                target_language=self.confirmed_target_language or self.translate_target_var.get(),
+                target_language=self.confirmed_target_language or self._get_current_target_language(),
             )
         except Exception as exc:
             messagebox.showerror("Error", f"Failed to save OCR result.\n{exc}")
@@ -468,9 +488,10 @@ class MainApp:
         if not original_text:
             return
 
-        source_lang = self.confirmed_source_language or self._get_current_source_language()
-        target_lang = self._get_current_target_language()
-        self.confirmed_target_language = target_lang
+        source_lang = self._get_current_translation_source_language()
+        target_lang = self._get_current_translation_target_language()
+        self.confirmed_source_language = self._get_current_source_language()
+        self.confirmed_target_language = self._get_current_target_language()
         self.translation_request_id += 1
         request_id = self.translation_request_id
 
