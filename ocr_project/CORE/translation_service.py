@@ -36,16 +36,6 @@ class TranslationService:
         self.source = source
         self._translator = None
 
-    def _translate_chunk(self, text: str) -> Optional[str]:
-        if not text.strip():
-            return text
-
-        self._ensure_translator()
-        translator = self._translator
-        if translator is None:
-            return None
-        return translator.translate(text)
-
     def translate(self, text: str) -> Optional[str]:
         if not text or not text.strip():
             return None
@@ -54,7 +44,11 @@ class TranslationService:
             return None
 
         try:
-            return self._translate_chunk(text)
+            self._ensure_translator()
+            translator = self._translator
+            if translator is None:
+                return None
+            return translator.translate(text)
         except Exception as exc:
             logger.error(f"Translation failed: {exc}")
             return None
