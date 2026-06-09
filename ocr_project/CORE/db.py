@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -27,11 +28,7 @@ def init_db() -> None:
                 payload_json TEXT,
                 source_region TEXT,
                 tags TEXT,
-                created_at TEXT NOT NULL,
-                context_note TEXT,
-                source_app TEXT,
-                source_title TEXT,
-                capture_area TEXT
+                created_at TEXT NOT NULL
             )
             """
         )
@@ -47,14 +44,6 @@ def init_db() -> None:
             conn.execute("ALTER TABLE ocr_results ADD COLUMN source_language TEXT")
         if "target_language" not in existing_columns:
             conn.execute("ALTER TABLE ocr_results ADD COLUMN target_language TEXT")
-        if "context_note" not in existing_columns:
-            conn.execute("ALTER TABLE ocr_results ADD COLUMN context_note TEXT")
-        if "source_app" not in existing_columns:
-            conn.execute("ALTER TABLE ocr_results ADD COLUMN source_app TEXT")
-        if "source_title" not in existing_columns:
-            conn.execute("ALTER TABLE ocr_results ADD COLUMN source_title TEXT")
-        if "capture_area" not in existing_columns:
-            conn.execute("ALTER TABLE ocr_results ADD COLUMN capture_area TEXT")
         conn.commit()
 
 
@@ -65,10 +54,6 @@ def save_ocr_result(
     payload_json: Optional[str] = None,
     created_at: Optional[str] = None,
     translation: Optional[str] = None,
-    context_note: Optional[str] = None,
-    source_app: Optional[str] = None,
-    source_title: Optional[str] = None,
-    capture_area: Optional[str] = None,
     source_language: Optional[str] = None,
     target_language: Optional[str] = None,
 ) -> int:
@@ -78,31 +63,29 @@ def save_ocr_result(
     init_db()
     created_at = created_at or datetime.now().isoformat(timespec="seconds")
 
-    stored_payload = payload_json
+    payload_data = {
+        "time": created_at,
+        "content": content.strip(),
+    }
+    if translation:
+        payload_data["translation"] = translation.strip()
+    payload_json = json.dumps(payload_data, ensure_ascii=False)
 
     with get_connection() as conn:
         cursor = conn.execute(
             """
-            INSERT INTO ocr_results (
-                content, translation_text, source_language, target_language,
-                payload_json, source_region, tags, created_at,
-                context_note, source_app, source_title, capture_area
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO ocr_results (content, translation_text, source_language, target_language, payload_json, source_region, tags, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 content.strip(),
                 translation.strip() if translation else None,
                 source_language,
                 target_language,
-                stored_payload,
+                payload_json,
                 source_region,
                 tags,
                 created_at,
-                context_note,
-                source_app,
-                source_title,
-                capture_area,
             ),
         )
         conn.commit()
@@ -124,24 +107,25 @@ def save_json_record(
     source_region: Optional[str] = None,
     tags: Optional[str] = None,
     translation: Optional[str] = None,
-    context_note: Optional[str] = None,
-    source_app: Optional[str] = None,
-    source_title: Optional[str] = None,
-    capture_area: Optional[str] = None,
     source_language: Optional[str] = None,
     target_language: Optional[str] = None,
 ) -> int:
     timestamp = datetime.now().isoformat(timespec="seconds")
+    payload_data = {
+        "time": timestamp,
+        "content": content.strip(),
+    }
+    if translation:
+        payload_data["translation"] = translation.strip()
+    payload = json.dumps(payload_data, ensure_ascii=False)
+
     return save_ocr_result(
         content=content,
+        payload_json=payload,
         source_region=source_region,
         tags=tags,
         created_at=timestamp,
         translation=translation,
-        context_note=context_note,
-        source_app=source_app,
-        source_title=source_title,
-        capture_area=capture_area,
         source_language=source_language,
         target_language=target_language,
     )
@@ -152,7 +136,7 @@ def list_ocr_results(limit: int = 200) -> List[Dict[str, Any]]:
     with get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT id, content, translation_text, source_language, target_language, payload_json, source_region, tags, created_at, context_note, source_app, source_title, capture_area
+            SELECT id, content, translation_text, source_language, target_language, payload_json, source_region, tags, created_at
             FROM ocr_results
             ORDER BY id DESC
             LIMIT ?
@@ -167,7 +151,7 @@ def get_ocr_result(result_id: int) -> Optional[Dict[str, Any]]:
     with get_connection() as conn:
         row = conn.execute(
             """
-            SELECT id, content, translation_text, source_language, target_language, payload_json, source_region, tags, created_at, context_note, source_app, source_title, capture_area
+            SELECT id, content, translation_text, source_language, target_language, payload_json, source_region, tags, created_at
             FROM ocr_results
             WHERE id = ?
             """,
@@ -190,7 +174,7 @@ def search_ocr_results(keyword: str, limit: int = 200) -> List[Dict[str, Any]]:
     with get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT id, content, translation_text, source_language, target_language, payload_json, source_region, tags, created_at, context_note, source_app, source_title, capture_area
+            SELECT id, content, translation_text, source_language, target_language, payload_json, source_region, tags, created_at
             FROM ocr_results
             WHERE content LIKE ?
             ORDER BY id DESC

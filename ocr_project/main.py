@@ -9,9 +9,8 @@ from tkinter import messagebox, ttk
 
 from CORE import db
 from CORE.app_settings import AppSettings, load_settings
-from CORE.ocr_service import OCRPreparedText
 from CORE.ocr_stabilizer import OCRStabilizer, StabilizerConfig
-from CORE.ocr_service import OCRService, prepare_ocr_text
+from CORE.ocr_service import OCRPreparedText, OCRService, prepare_ocr_text
 from CORE.translation_service import TranslationService
 from CORE.language_config import (
     DEFAULT_SOURCE_LANGUAGE,
@@ -48,7 +47,6 @@ class MainApp:
         self.root.geometry("700x600")
         self.root.resizable(True, True)
         self.root.minsize(500, 400)
-        self.root.configure(bg="#eef1f7")
         self.settings = load_settings()
 
         self.capture_interval_seconds = 2.0
@@ -83,50 +81,34 @@ class MainApp:
         self._poll_ui_queue()
 
     def _build_ui(self) -> None:
-        self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(1, weight=1)
-
         header = tk.Frame(self.root, bg="#4B4FA6", height=100)
-        header.grid(row=0, column=0, sticky="ew")
+        header.pack(fill="x")
         tk.Label(header, text="OCR Study App", font=("Segoe UI", 18, "bold"), bg="#4B4FA6", fg="white").pack(pady=30)
 
-        content = tk.Frame(self.root, bg="#eef1f7", padx=24, pady=20)
-        content.grid(row=1, column=0, sticky="nsew")
-        content.grid_columnconfigure(0, weight=1)
-        content.grid_rowconfigure(0, weight=1)
+        card = tk.Frame(self.root, bg="white", highlightthickness=1, highlightbackground="#DDDDDD")
+        card.pack(padx=30, pady=20, fill="x")
 
-        card = tk.Frame(content, bg="white", highlightthickness=1, highlightbackground="#DDDDDD")
-        card.grid(row=0, column=0, sticky="nsew")
-        card.grid_columnconfigure(0, weight=1)
-
-        self._build_language_controls(card)
+        self._build_language_controls()
 
         self.region_label_var = tk.StringVar(value="Selected Region: None")
         self.status_label_var = tk.StringVar(value="Ready for Scanning")
         self.preview_label_var = tk.StringVar(value="OCR Preview: None")
 
-        tk.Label(card, text="SYSTEM STATUS", font=("Segoe UI", 8, "bold"), bg="white", fg="#65676B").pack(pady=(8, 0), padx=20, anchor="w")
+        tk.Label(card, text="SYSTEM STATUS", font=("Segoe UI", 8, "bold"), bg="white", fg="#65676B").pack(pady=(15, 0), padx=20, anchor="w")
         tk.Label(card, textvariable=self.status_label_var, font=("Segoe UI", 12, "bold"), bg="white", fg="#1C1E21").pack(pady=(5, 10), padx=20, anchor="w")
         tk.Label(card, textvariable=self.region_label_var, font=("Segoe UI", 9), bg="white", fg="#8A8D91").pack(padx=20, anchor="w")
-        self.preview_label = tk.Label(card, textvariable=self.preview_label_var, font=("Segoe UI", 8), bg="white", fg="#8A8D91", wraplength=350, justify="left")
-        self.preview_label.pack(pady=(5, 15), padx=20, anchor="w", fill="x")
-
-        actions = tk.Frame(card, bg="white", padx=20, pady=12)
-        actions.pack(fill="x", expand=True)
-        actions.grid_columnconfigure(0, weight=1)
+        tk.Label(card, textvariable=self.preview_label_var, font=("Segoe UI", 8), bg="white", fg="#8A8D91", wraplength=350, justify="left").pack(pady=(5, 15), padx=20, anchor="w")
 
         btn_style = {"font": ("Segoe UI", 10, "bold"), "fg": "white", "relief": "flat", "height": 2, "cursor": "hand2"}
 
-        tk.Button(actions, text="OCR 번역 시작", bg="#5E66F2", command=self.open_selector, **btn_style).pack(fill="x", pady=5)
-        tk.Button(actions, text="퀴즈 풀기", bg="#8AA0F2", command=self.open_quiz, **btn_style).pack(fill="x", pady=5)
-        tk.Button(actions, text="저장 기록 보기", bg="#99A6F2", command=self.open_study_list, **btn_style).pack(fill="x", pady=5)
-        tk.Button(actions, text="설정", bg="#6B7FF2", command=self.open_settings, **btn_style).pack(fill="x", pady=5)
+        tk.Button(self.root, text="OCR 번역 시작", bg="#5E66F2", command=self.open_selector, **btn_style).pack(padx=30, fill="x", pady=5)
+        tk.Button(self.root, text="퀴즈 풀기", bg="#8AA0F2", command=self.open_quiz, **btn_style).pack(padx=30, fill="x", pady=5)
+        tk.Button(self.root, text="저장 기록 보기", bg="#99A6F2", command=self.open_study_list, **btn_style).pack(padx=30, fill="x", pady=5)
+        tk.Button(self.root, text="설정", bg="#6B7FF2", command=self.open_settings, **btn_style).pack(padx=30, fill="x", pady=5)
 
-        self.root.bind("<Configure>", self._on_root_resized)
-
-    def _build_language_controls(self, parent: tk.Misc) -> None:
-        frame = tk.Frame(parent, bg="white", padx=20, pady=16)
-        frame.pack(fill="x")
+    def _build_language_controls(self) -> None:
+        frame = tk.Frame(self.root, bg="white")
+        frame.pack(pady=(5, 10))
         
         tk.Label(frame, text="원본:", font=("Segoe UI", 9, "bold"), bg="white", fg="#65676B").pack(side="left", padx=(0, 5))
         
@@ -156,11 +138,6 @@ class MainApp:
         )
         self.translate_target_combo.pack(side="left")
 
-    def _on_root_resized(self, _event=None) -> None:
-        if hasattr(self, "preview_label"):
-            width = max(260, self.root.winfo_width() - 120)
-            self.preview_label.configure(wraplength=width)
-
     def _get_language_display(self, code: str) -> str:
         return get_language_name(code)
 
@@ -172,15 +149,6 @@ class MainApp:
 
     def _get_current_translation_target_language(self) -> str:
         return get_translation_language(self._get_current_target_language())
-
-    def _get_selected_ocr_languages(self) -> List[str]:
-        source_language = self._get_current_source_language()
-        languages: List[str] = []
-        if source_language:
-            languages.append(source_language)
-        if "en" not in languages:
-            languages.append("en")
-        return languages
 
     def _build_ocr_stabilizer(self, settings: AppSettings) -> OCRStabilizer:
         return OCRStabilizer(
@@ -366,7 +334,7 @@ class MainApp:
             messagebox.showwarning("Notice", "No selected region is available.")
             return
 
-        content = "\n".join(self.ocr_text).strip()
+        content = (self.display_text or "\n".join(self.ocr_text)).strip()
         tags = ",".join(self.last_result_languages or [self._get_current_source_language()])
         translated = self.translated_text
         if self.translation_in_flight:

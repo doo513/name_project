@@ -28,6 +28,17 @@ class OCRToken:
         return max(1.0, self.bottom - self.top)
 
 
+@dataclass
+class OCRLine:
+    tokens: List[OCRToken]
+
+    @property
+    def center_y(self) -> float:
+        if not self.tokens:
+            return 0.0
+        return sum(token.center_y for token in self.tokens) / len(self.tokens)
+
+
 @dataclass(frozen=True)
 class OCRPreparedText:
     lines: List[str]
@@ -88,20 +99,46 @@ def _needs_space(previous: str, current: str) -> bool:
     return True
 
 
-def _join_token_texts(tokens: List[OCRToken]) -> str:
+def _build_line_text(line: OCRLine) -> str:
+    ordered_tokens = sorted(line.tokens, key=lambda token: (token.left, token.top))
     parts: List[str] = []
-    for token in sorted(tokens, key=lambda item: (item.left, item.top)):
+
+    for token in ordered_tokens:
         if not parts:
             parts.append(token.text)
             continue
+
         if _needs_space(parts[-1], token.text):
             parts.append(" ")
         parts.append(token.text)
+
     return "".join(parts).strip()
 
 
+def _group_tokens_into_lines(tokens: List[OCRToken], y_threshold: float) -> List[OCRLine]:
+    lines: List[OCRLine] = []
+
+    for token in sorted(tokens, key=lambda item: (item.center_y, item.left)):
+        best_line = None
+        best_distance = None
+
+        for line in lines:
+            distance = abs(token.center_y - line.center_y)
+            if distance <= y_threshold and (best_distance is None or distance < best_distance):
+                best_line = line
+                best_distance = distance
+
+        if best_line is None:
+            lines.append(OCRLine(tokens=[token]))
+            continue
+
+        best_line.tokens.append(token)
+
+    return sorted(lines, key=lambda line: line.center_y)
+
+
 def reconstruct_lines_from_raw(results, confidence_threshold: float = 0.2) -> List[str]:
-    tokens = []
+    tokens: List[OCRToken] = []
     for item in results:
         token = _token_from_result(item)
         if token is None or token.confidence < confidence_threshold:
@@ -111,69 +148,24 @@ def reconstruct_lines_from_raw(results, confidence_threshold: float = 0.2) -> Li
     if not tokens:
         return []
 
-    tokens.sort(key=lambda item: (item.center_y, item.left))
     heights = [token.height for token in tokens]
     y_threshold = max(12.0, median(heights) * 0.65)
-
-    grouped_lines: List[List[OCRToken]] = []
-    line_centers: List[float] = []
-
-    for token in tokens:
-        best_index = None
-        best_distance = None
-        for index, center in enumerate(line_centers):
-            distance = abs(token.center_y - center)
-            if distance <= y_threshold and (best_distance is None or distance < best_distance):
-                best_index = index
-                best_distance = distance
-
-        if best_index is None:
-            grouped_lines.append([token])
-            line_centers.append(token.center_y)
-            continue
-
-        grouped_lines[best_index].append(token)
-        line_centers[best_index] = sum(item.center_y for item in grouped_lines[best_index]) / len(grouped_lines[best_index])
-
-    ordered_pairs = sorted(zip(line_centers, grouped_lines), key=lambda pair: pair[0])
-    return [_join_token_texts(line_tokens) for _, line_tokens in ordered_pairs if line_tokens]
+    grouped_lines = _group_tokens_into_lines(tokens, y_threshold)
+    return [_build_line_text(line) for line in grouped_lines if line.tokens]
 
 
 def clean_ocr_text(lines: List[str]) -> List[str]:
     if not lines:
         return lines
 
-    cleaned = []
-
+    cleaned: List[str] = []
     for line in lines:
         if not line:
             continue
-        line = line.strip()
-        if not line:
+        stripped = line.strip()
+        if not stripped:
             continue
-
-        if cleaned:
-            prev_line = cleaned[-1]
-            if prev_line and (prev_line[-1].isalnum() or line[0].isalnum()):
-                char_before = prev_line[-1] if prev_line else ""
-                char_after = line[0] if line else ""
-
-                should_merge = False
-                if char_before.isalnum() and char_after.isalnum():
-                    should_merge = True
-                elif char_before.isalnum() and char_after in "'\"":
-                    should_merge = True
-                elif char_before in "'\"" and char_after.isalnum():
-                    should_merge = True
-
-                if should_merge:
-                    cleaned[-1] = prev_line + " " + line
-                    continue
-
-        cleaned.append(line)
-
-    while cleaned and not cleaned[-1]:
-        cleaned.pop()
+        cleaned.append(stripped)
 
     return cleaned
 
@@ -201,10 +193,9 @@ class OCRService:
     def __init__(self) -> None:
         self.languages = ["ko", "en"]
         self.engine = create_ocr_engine(self.languages)
-        self.last_error: Optional[str] = None
 
     def set_languages(self, languages: List[str]) -> None:
-        normalized = []
+        normalized: List[str] = []
         for lang in languages:
             if lang and lang not in normalized:
                 normalized.append(lang)
@@ -217,45 +208,23 @@ class OCRService:
 
         self.languages = normalized
         self.engine = create_ocr_engine(self.languages)
-        self.last_error = None
-
-    def _engine_error(self) -> str:
-        if self.engine is not None and hasattr(self.engine, "get_last_error"):
-            err = self.engine.get_last_error()
-            if err:
-                return err
-        if self.last_error:
-            return self.last_error
-        return f"OCR engine failed to initialize for languages: {self.languages}"
 
     def is_available(self) -> bool:
-        if np is None:
-            self.last_error = "numpy is not installed. Install it with: pip install numpy"
-            return False
-        if self.engine is None:
-            self.last_error = "EasyOCR is not installed. Install it with: pip install easyocr"
-            return False
-        available = self.engine.is_available()
-        if not available:
-            self.last_error = self._engine_error()
-        return available
+        return self.engine is not None and np is not None and self.engine.is_available()
 
     def recognize_image_raw(self, image):
-        if self.engine is None:
-            raise RuntimeError("EasyOCR is not installed. Install it with: pip install easyocr")
+        engine = self.engine
+        if engine is None:
+            raise RuntimeError("OCR engine is not available.")
         if np is None:
-            raise RuntimeError("numpy is not installed. Install it with: pip install numpy")
-
-        if not self.engine.is_available():
-            raise RuntimeError(self._engine_error())
+            raise RuntimeError("numpy is not installed.")
+        if not engine.is_available():
+            raise RuntimeError("OCR engine failed to initialize for the selected language pair.")
 
         image_array = np.array(image)
-        return self.engine.read_text_simple(image_array)
+        return engine.read_text_detailed(image_array)
 
-    def recognize_image(self, image) -> List[str]:
-        result = self.recognize_image_raw(image)
-        if not result and self.engine is not None and hasattr(self.engine, "get_last_error"):
-            err = self.engine.get_last_error()
-            if err:
-                raise RuntimeError(err)
-        return clean_ocr_text([line for line in result if line])
+    def recognize_image(self, image) -> OCRPreparedText:
+        raw_result = self.recognize_image_raw(image)
+        lines = reconstruct_lines_from_raw(raw_result)
+        return prepare_ocr_text(lines)
