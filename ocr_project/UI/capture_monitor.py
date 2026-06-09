@@ -5,15 +5,25 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
 
+from CORE.language_config import (
+    DEFAULT_SOURCE_LANGUAGE,
+    DEFAULT_TARGET_LANGUAGE,
+    LANGUAGE_CODES,
+)
+
 try:
     from PIL import ImageGrab
-except Exception:
+    IMAGEGRAB_IMPORT_ERROR = None
+except Exception as exc:
     ImageGrab = None
+    IMAGEGRAB_IMPORT_ERROR = exc
 
 try:
     MSS = importlib.import_module("mss")
-except Exception:
+    MSS_IMPORT_ERROR = None
+except Exception as exc:
     MSS = None
+    MSS_IMPORT_ERROR = exc
 
 
 Region = Tuple[int, int, int, int]
@@ -25,6 +35,8 @@ class CaptureMonitor:
         parent: tk.Misc,
         region: Region,
         interval_seconds: float = 2.0,
+        source_lang: str = DEFAULT_SOURCE_LANGUAGE,
+        target_lang: str = DEFAULT_TARGET_LANGUAGE,
         on_frame: Optional[Callable[[Region, object, bool], None]] = None,
         on_save: Optional[Callable[[], None]] = None,
         on_stop: Optional[Callable[[], None]] = None,
@@ -34,6 +46,8 @@ class CaptureMonitor:
         self.parent = parent
         self.region = region
         self.interval_seconds = interval_seconds
+        self.source_lang = source_lang
+        self.target_lang = target_lang
         self.on_frame = on_frame
         self.on_save = on_save
         self.on_stop = on_stop
@@ -45,6 +59,7 @@ class CaptureMonitor:
         self._stopped = False
         self._reselecting = False
         self.outline_windows = []
+        self.last_capture_error = None
 
         self._build_window()
 
@@ -134,11 +149,11 @@ class CaptureMonitor:
             font=("Segoe UI", 9),
         ).pack(side="left", padx=(0, 4))
 
-        self.source_lang_var = tk.StringVar(value="en")
+        self.source_lang_var = tk.StringVar(value=self.source_lang)
         source_combo = ttk.Combobox(
             btn_row,
             textvariable=self.source_lang_var,
-            values=["ko", "en", "ja", "zh", "es", "fr", "de", "ru", "ar"],
+            values=LANGUAGE_CODES,
             state="readonly",
             width=6,
         )
@@ -160,11 +175,11 @@ class CaptureMonitor:
             font=("Segoe UI", 9),
         ).pack(side="left", padx=(0, 4))
 
-        self.translate_target_var = tk.StringVar(value="ko")
+        self.translate_target_var = tk.StringVar(value=self.target_lang)
         target_combo = ttk.Combobox(
             btn_row,
             textvariable=self.translate_target_var,
-            values=["ko", "en", "ja", "zh", "es", "fr", "de", "ru", "ar"],
+            values=LANGUAGE_CODES,
             state="readonly",
             width=6,
         )
@@ -214,23 +229,54 @@ class CaptureMonitor:
     def get_source_lang(self) -> str:
         if hasattr(self, 'source_lang_var'):
             return self.source_lang_var.get()
-        return "en"
+        return DEFAULT_SOURCE_LANGUAGE
 
     def get_translate_target(self) -> str:
         if hasattr(self, 'translate_target_var'):
             return self.translate_target_var.get()
-        return "ko"
+        return DEFAULT_TARGET_LANGUAGE
 
-    def start(self) -> None:
+    def start(self) -> bool:
         if ImageGrab is None and MSS is None:
-            messagebox.showerror("Error", "No screen capture backend is available.")
-            self.stop()
-            return
+            details = [
+                "No screen capture backend is available.",
+                "",
+                "This means both Pillow ImageGrab and mss failed to import in the Python environment that is running this app.",
+                "",
+                f"Pillow/ImageGrab import error: {IMAGEGRAB_IMPORT_ERROR}",
+                f"mss import error: {MSS_IMPORT_ERROR}",
+                "",
+                "Run this in the project folder with the same Python/uv environment:",
+                "uv pip install -r requirements.txt",
+                "",
+                "Or without uv:",
+                "python -m pip install Pillow mss",
+            ]
+            message = "\n".join(details)
+            messagebox.showerror("Screen Capture Backend Error", message)
+            self.set_status("Capture failed: Pillow/mss is not installed or not importable in this environment.")
+            self.stop(notify=False)
+            return False
 
         self.active = True
         self._show_region_outline()
         self.set_status(f"Capturing every {self.interval_seconds:.1f} seconds.")
-        self._capture_loop()
+
+        # Try one capture immediately. If both installed backends fail, stop cleanly
+        # and report the real backend error instead of leaving the panel idle.
+        image = self._grab_screen()
+        if image is None:
+            message = self.last_capture_error or "Unable to capture screen."
+            self.set_status(f"Capture failed: {message}")
+            messagebox.showerror("Capture Error", f"Unable to capture selected region.\n{message}")
+            self.stop(notify=False)
+            return False
+
+        if callable(self.on_frame):
+            self.on_frame(self.region, image, True)
+
+        self.capture_job = self.parent.after(int(self.interval_seconds * 1000), self._capture_loop)
+        return True
 
     def focus_panel(self) -> None:
         if getattr(self, "win", None) and self.win.winfo_exists():
@@ -258,24 +304,36 @@ class CaptureMonitor:
 
     def _grab_screen(self):
         x1, y1, x2, y2 = self.region
+        left = min(x1, x2)
+        top = min(y1, y2)
+        right = max(x1, x2)
+        bottom = max(y1, y2)
+        width = max(1, right - left)
+        height = max(1, bottom - top)
+
+        errors = []
+        self.last_capture_error = None
 
         if ImageGrab is not None:
             try:
-                return ImageGrab.grab(bbox=(x1, y1, x2, y2))
-            except Exception:
-                pass
+                return ImageGrab.grab(bbox=(left, top, right, bottom))
+            except Exception as exc:
+                errors.append(f"Pillow ImageGrab failed: {exc}")
 
         if MSS is not None:
             try:
                 with MSS.mss() as sct:
-                    monitor = {"top": y1, "left": x1, "width": x2 - x1, "height": y2 - y1}
+                    monitor = {"top": top, "left": left, "width": width, "height": height}
                     screenshot = sct.grab(monitor)
                     from PIL import Image
 
                     return Image.frombytes("RGB", screenshot.size, screenshot.rgb)
-            except Exception:
-                pass
+            except Exception as exc:
+                errors.append(f"mss failed: {exc}")
 
+        if not errors:
+            errors.append("Pillow ImageGrab and mss are both unavailable.")
+        self.last_capture_error = " | ".join(errors)
         return None
 
     def request_reselect_area(self) -> None:
@@ -407,6 +465,8 @@ def open_capture_monitor(
     parent: tk.Misc,
     region: Region,
     interval_seconds: float = 2.0,
+    source_lang: str = DEFAULT_SOURCE_LANGUAGE,
+    target_lang: str = DEFAULT_TARGET_LANGUAGE,
     on_frame: Optional[Callable[[Region, object, bool], None]] = None,
     on_save: Optional[Callable[[], None]] = None,
     on_stop: Optional[Callable[[], None]] = None,
@@ -417,6 +477,8 @@ def open_capture_monitor(
         parent,
         region=region,
         interval_seconds=interval_seconds,
+        source_lang=source_lang,
+        target_lang=target_lang,
         on_frame=on_frame,
         on_save=on_save,
         on_stop=on_stop,
