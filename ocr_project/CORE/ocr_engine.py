@@ -17,11 +17,6 @@ OCRDetailedResult = Tuple[OCRRawBox, str, float]
 
 
 def get_ocr_engine() -> Optional["OCREngine"]:
-    """
-    Get the shared OCR engine instance.
-
-    Creates it on first call, then reuses the same instance.
-    """
     global _shared_engine
     if _shared_engine is None and easyocr is not None:
         _shared_engine = OCREngine()
@@ -35,33 +30,37 @@ def create_ocr_engine(languages: Optional[List[str]] = None) -> Optional["OCREng
 
 
 class OCREngine:
-    """
-    EasyOCR wrapper for screen text extraction.
-
-    The reader is initialized lazily because model loading is expensive.
-    """
+    """EasyOCR wrapper for screen text extraction."""
 
     def __init__(self, languages: Optional[List[str]] = None) -> None:
         self.languages = languages or ["ko", "en"]
-        self._reader: Optional[Any] = None
+        self._reader: Optional[object] = None
+        self.last_error: Optional[str] = None
 
     def _ensure_reader(self) -> bool:
         if self._reader is not None:
             return True
 
         if easyocr is None:
-            logger.error("EasyOCR is not installed")
+            self.last_error = "EasyOCR is not installed. Install it with: pip install easyocr"
+            logger.error(self.last_error)
             return False
 
         try:
+            self.last_error = None
             self._reader = easyocr.Reader(self.languages, gpu=False, verbose=False)
             return True
         except Exception as exc:
-            logger.error(f"Failed to initialize EasyOCR reader: {exc}")
+            self.last_error = f"Failed to initialize EasyOCR reader for {self.languages}: {exc}"
+            logger.error(self.last_error)
+            self._reader = None
             return False
 
     def is_available(self) -> bool:
         return self._ensure_reader()
+
+    def get_last_error(self) -> Optional[str]:
+        return self.last_error
 
     def read_text(self, image_path: str) -> List[Tuple[str, float]]:
         if not self._ensure_reader():
@@ -79,7 +78,8 @@ class OCREngine:
             result = reader.readtext(str(path))
             return [(text, float(confidence)) for _, text, confidence in result]
         except Exception as exc:
-            logger.error(f"Failed to read text from {image_path}: {exc}")
+            self.last_error = f"Failed to read text from {image_path}: {exc}"
+            logger.error(self.last_error)
             return []
 
     def read_text_simple(self, image_input) -> List[str]:
@@ -92,19 +92,22 @@ class OCREngine:
         try:
             import numpy as np
 
+            self.last_error = None
             if isinstance(image_input, np.ndarray):
                 result = reader.readtext(image_input, detail=0)
                 return list(result)
 
             path = Path(image_input)
             if not path.exists():
-                logger.warning(f"Image file not found: {path}")
+                self.last_error = f"Image file not found: {path}"
+                logger.warning(self.last_error)
                 return []
 
             result = reader.readtext(str(path), detail=0)
             return list(result)
         except Exception as exc:
-            logger.error(f"Failed to read text: {exc}")
+            self.last_error = f"Failed to read text with EasyOCR languages {self.languages}: {exc}"
+            logger.error(self.last_error)
             return []
 
     def read_text_detailed(self, image_input) -> List[OCRDetailedResult]:
