@@ -1,4 +1,5 @@
 from typing import List, Optional
+from dataclasses import dataclass
 
 try:
     import numpy as np
