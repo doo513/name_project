@@ -220,6 +220,7 @@ class MainApp:
             on_save=self._save_current_result,
             on_stop=self._on_capture_stopped,
             on_translate=self._on_translate_pressed,
+            on_reselect=self._on_region_selected,
         )
         self.capture_monitor.start()
         self.capture_monitor.set_result_text("Waiting for OCR result...")
