@@ -10,26 +10,35 @@ class StudyListWindow:
         self.win.title("Study List")
         self.win.geometry("920x560")
         self.win.minsize(700, 420)
+        self.win.configure(bg="#f7f8fb")
 
         self._build_ui()
         self.load_data()
+        self.win.bind("<Configure>", self._on_window_resized)
 
     def _build_ui(self) -> None:
-        top = tk.Frame(self.win, padx=12, pady=10)
+        container = tk.Frame(self.win, bg="#f7f8fb", padx=12, pady=10)
+        container.pack(fill="both", expand=True)
+
+        top = tk.Frame(container, bg="#f7f8fb")
         top.pack(fill="x")
 
         tk.Label(top, text="Study List", font=("Segoe UI", 12, "bold")).pack(side="left")
 
         self.keyword_var = tk.StringVar()
-        tk.Entry(top, textvariable=self.keyword_var, width=28).pack(side="right", padx=(8, 0))
+        tk.Entry(top, textvariable=self.keyword_var, width=28).pack(side="right", padx=(8, 0), fill="x")
         tk.Button(top, text="Search", width=10, command=self.search_data).pack(side="right", padx=(6, 0))
         tk.Button(top, text="Refresh", width=10, command=self.load_data).pack(side="right")
 
-        columns = ("id", "created_at", "preview")
-        self.tree = ttk.Treeview(self.win, columns=columns, show="headings")
-        self.tree.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        panes = tk.PanedWindow(container, orient="vertical", sashrelief="flat", bg="#f7f8fb")
+        panes.pack(fill="both", expand=True, pady=(8, 10))
 
-        vsb = ttk.Scrollbar(self.win, orient="vertical", command=self.tree.yview)
+        columns = ("id", "created_at", "preview")
+        list_frame = tk.Frame(panes, bg="#f7f8fb")
+        self.tree = ttk.Treeview(list_frame, columns=columns, show="headings")
+        self.tree.pack(side="left", fill="both", expand=True)
+
+        vsb = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
         vsb.pack(side="right", fill="y")
         self.tree.configure(yscrollcommand=vsb.set)
 
@@ -43,20 +52,26 @@ class StudyListWindow:
 
         self.tree.bind("<<TreeviewSelect>>", self.show_selected_detail)
 
-        detail_frame = tk.LabelFrame(self.win, text="Details", padx=8, pady=8)
-        detail_frame.pack(fill="x", padx=12, pady=(0, 10))
+        detail_frame = tk.LabelFrame(panes, text="Details", padx=8, pady=8)
 
         detail_scroll = tk.Scrollbar(detail_frame)
         detail_scroll.pack(side="right", fill="y")
 
         self.detail = tk.Text(detail_frame, height=7, wrap="word", font=("Consolas", 10), yscrollcommand=detail_scroll.set)
-        self.detail.pack(fill="x")
+        self.detail.pack(fill="both", expand=True)
         detail_scroll.config(command=self.detail.yview)
 
-        bottom = tk.Frame(self.win, padx=12, pady=(0, 12))
+        panes.add(list_frame, minsize=220)
+        panes.add(detail_frame, minsize=120)
+
+        bottom = tk.Frame(container, bg="#f7f8fb", pady=4)
         bottom.pack(fill="x")
 
         tk.Button(bottom, text="Delete Selected", width=14, command=self.delete_selected).pack(side="right")
+
+    def _on_window_resized(self, _event=None) -> None:
+        preview_width = max(260, self.win.winfo_width() - 320)
+        self.tree.column("preview", width=preview_width)
 
     def _preview(self, text: str, limit: int = 70) -> str:
         text = (text or "").replace("\n", " ").strip()

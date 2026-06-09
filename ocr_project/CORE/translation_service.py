@@ -1,5 +1,4 @@
 import logging
-import textwrap
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -37,6 +36,16 @@ class TranslationService:
         self.source = source
         self._translator = None
 
+    def _translate_chunk(self, text: str) -> Optional[str]:
+        if not text.strip():
+            return text
+
+        self._ensure_translator()
+        translator = self._translator
+        if translator is None:
+            return None
+        return translator.translate(text)
+
     def translate(self, text: str) -> Optional[str]:
         if not text or not text.strip():
             return None
@@ -45,20 +54,7 @@ class TranslationService:
             return None
 
         try:
-            self._ensure_translator()
-            if len(text) <= 500:
-                return self._translator.translate(text)
-            else:
-                chunks = textwrap.wrap(text, 450, break_long_words=False)
-                results = []
-                for chunk in chunks:
-                    t = GoogleTranslator(
-                        source=self.source if self.source != "auto" else "en",
-                        target=self.target
-                    ).translate(chunk)
-                    if t:
-                        results.append(t)
-                return " ".join(results) if results else None
+            return self._translate_chunk(text)
         except Exception as exc:
             logger.error(f"Translation failed: {exc}")
             return None
@@ -70,7 +66,10 @@ class TranslationService:
             return []
         try:
             self._ensure_translator()
-            results = self._translator.translate_batch(texts)
+            translator = self._translator
+            if translator is None:
+                return []
+            results = translator.translate_batch(texts)
             return list(results)
         except Exception as exc:
             logger.warning(f"Translation batch failed: {exc}")

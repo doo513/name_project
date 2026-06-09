@@ -11,8 +11,9 @@ class QuizWindow:
     def __init__(self, parent: tk.Misc) -> None:
         self.win = tk.Toplevel(parent)
         self.win.title("퀴즈 풀기")
-        self.win.geometry("760x460")
+        self.win.geometry("820x560")
         self.win.minsize(560, 360)
+        self.win.configure(bg="#f7f8fb")
 
         self.quiz_items = self._load_quiz_items()
         self.current_index = 0
@@ -26,26 +27,31 @@ class QuizWindow:
 
         self._build_ui()
         self._render_question()
+        self.win.bind("<Configure>", self._on_window_resized)
 
     def _build_ui(self) -> None:
-        top = tk.Frame(self.win, padx=12, pady=10)
+        container = tk.Frame(self.win, bg="#f7f8fb", padx=12, pady=10)
+        container.pack(fill="both", expand=True)
+
+        top = tk.Frame(container, bg="#f7f8fb")
         top.pack(fill="x")
         tk.Label(top, text="퀴즈 풀기", font=("Segoe UI", 12, "bold")).pack(side="left")
         self.progress_label = tk.Label(top, text="", fg="#555555")
         self.progress_label.pack(side="right")
 
-        q_box = tk.LabelFrame(self.win, text="문제", padx=10, pady=10)
-        q_box.pack(fill="x", padx=12, pady=(0, 8))
+        q_box = tk.LabelFrame(container, text="문제", padx=10, pady=10)
+        q_box.pack(fill="x", pady=(0, 8))
         self.question_var = tk.StringVar()
-        tk.Label(q_box, textvariable=self.question_var, justify="left", wraplength=700).pack(anchor="w")
+        self.question_label = tk.Label(q_box, textvariable=self.question_var, justify="left", wraplength=700)
+        self.question_label.pack(anchor="w", fill="x")
 
-        a_box = tk.LabelFrame(self.win, text="답안 입력", padx=10, pady=10)
-        a_box.pack(fill="x", padx=12, pady=(0, 8))
+        a_box = tk.LabelFrame(container, text="답안 입력", padx=10, pady=10)
+        a_box.pack(fill="x", pady=(0, 8))
         self.answer_var = tk.StringVar()
         self.answer_entry = tk.Entry(a_box, textvariable=self.answer_var, font=("Segoe UI", 11))
         self.answer_entry.pack(fill="x")
 
-        btns = tk.Frame(self.win, padx=12, pady=8)
+        btns = tk.Frame(container, bg="#f7f8fb", pady=8)
         btns.pack(fill="x")
 
         tk.Button(
@@ -72,15 +78,22 @@ class QuizWindow:
         ).pack(side="right", padx=(0, 8))
 
         self.result_var = tk.StringVar(value="대기 중")
-        tk.Label(
-            self.win,
+        result_box = tk.LabelFrame(container, text="결과", padx=10, pady=10)
+        result_box.pack(fill="both", expand=True)
+        self.result_label = tk.Label(
+            result_box,
             textvariable=self.result_var,
             fg="#333333",
             anchor="w",
             justify="left",
-            padx=12,
-            pady=8,
-        ).pack(fill="x")
+            wraplength=720,
+        )
+        self.result_label.pack(fill="both", expand=True)
+
+    def _on_window_resized(self, _event=None) -> None:
+        wrap = max(320, self.win.winfo_width() - 100)
+        self.question_label.configure(wraplength=wrap)
+        self.result_label.configure(wraplength=wrap)
 
     def _load_quiz_items(self):
         loader = ProblemLoader()

@@ -1,9 +1,10 @@
+import importlib
 import logging
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
 try:
-    import easyocr
+    easyocr = importlib.import_module("easyocr")
 except ImportError:
     easyocr = None
 
@@ -11,6 +12,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 _shared_engine: Optional["OCREngine"] = None
+OCRRawBox = Sequence[Sequence[float]]
+OCRDetailedResult = Tuple[OCRRawBox, str, float]
 
 
 def get_ocr_engine() -> Optional["OCREngine"]:
@@ -62,6 +65,9 @@ class OCREngine:
     def read_text(self, image_path: str) -> List[Tuple[str, float]]:
         if not self._ensure_reader():
             return []
+        reader = self._reader
+        if reader is None:
+            return []
 
         try:
             path = Path(image_path)
@@ -69,7 +75,7 @@ class OCREngine:
                 logger.warning(f"Image file not found: {path}")
                 return []
 
-            result = self._reader.readtext(str(path))
+            result = reader.readtext(str(path))
             return [(text, float(confidence)) for _, text, confidence in result]
         except Exception as exc:
             self.last_error = f"Failed to read text from {image_path}: {exc}"
@@ -79,13 +85,16 @@ class OCREngine:
     def read_text_simple(self, image_input) -> List[str]:
         if not self._ensure_reader():
             return []
+        reader = self._reader
+        if reader is None:
+            return []
 
         try:
             import numpy as np
 
             self.last_error = None
             if isinstance(image_input, np.ndarray):
-                result = self._reader.readtext(image_input, detail=0)
+                result = reader.readtext(image_input, detail=0)
                 return list(result)
 
             path = Path(image_input)
@@ -94,9 +103,34 @@ class OCREngine:
                 logger.warning(self.last_error)
                 return []
 
-            result = self._reader.readtext(str(path), detail=0)
+            result = reader.readtext(str(path), detail=0)
             return list(result)
         except Exception as exc:
             self.last_error = f"Failed to read text with EasyOCR languages {self.languages}: {exc}"
             logger.error(self.last_error)
+            return []
+
+    def read_text_detailed(self, image_input) -> List[OCRDetailedResult]:
+        if not self._ensure_reader():
+            return []
+        reader = self._reader
+        if reader is None:
+            return []
+
+        try:
+            import numpy as np
+
+            if isinstance(image_input, np.ndarray):
+                result = reader.readtext(image_input, detail=1)
+                return list(result)
+
+            path = Path(image_input)
+            if not path.exists():
+                logger.warning(f"Image file not found: {path}")
+                return []
+
+            result = reader.readtext(str(path), detail=1)
+            return list(result)
+        except Exception as exc:
+            logger.error(f"Failed to read detailed text: {exc}")
             return []
