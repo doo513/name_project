@@ -131,28 +131,3 @@ class OCREngine:
         except Exception as exc:
             logger.error(f"Failed to read detailed text: {exc}")
             return []
-
-    def read_text_detailed(self, image_input) -> List[OCRDetailedResult]:
-        if not self._ensure_reader():
-            return []
-        reader = self._reader
-        if reader is None:
-            return []
-
-        try:
-            import numpy as np
-
-            if isinstance(image_input, np.ndarray):
-                result = reader.readtext(image_input, detail=1)
-                return list(result)
-
-            path = Path(image_input)
-            if not path.exists():
-                logger.warning(f"Image file not found: {path}")
-                return []
-
-            result = reader.readtext(str(path), detail=1)
-            return list(result)
-        except Exception as exc:
-            logger.error(f"Failed to read detailed text: {exc}")
-            return []
