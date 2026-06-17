@@ -81,36 +81,99 @@ class MainApp:
         self._poll_ui_queue()
 
     def _build_ui(self) -> None:
+        # Configure root grid for responsive layout
+        self.root.grid_columnconfigure(0, weight=1)
+        self.root.grid_rowconfigure(1, weight=1)
+
+        # Header - fixed height
         header = tk.Frame(self.root, bg="#4B4FA6", height=100)
-        header.pack(fill="x")
+        header.grid(row=0, column=0, sticky="ew")
+        header.grid_propagate(False)
         tk.Label(header, text="OCR Study App", font=("Segoe UI", 18, "bold"), bg="#4B4FA6", fg="white").pack(pady=30)
 
-        card = tk.Frame(self.root, bg="white", highlightthickness=1, highlightbackground="#DDDDDD")
-        card.pack(padx=30, pady=20, fill="x")
+        # Main content area with scrollbar
+        content_frame = tk.Frame(self.root, bg="#eef1f7")
+        content_frame.grid(row=1, column=0, sticky="nsew")
+        content_frame.grid_columnconfigure(0, weight=1)
+        content_frame.grid_rowconfigure(0, weight=1)
 
-        self._build_language_controls()
+        # Canvas + scrollbar for scrollable content
+        self.canvas = tk.Canvas(content_frame, bg="#eef1f7", highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(content_frame, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas, bg="#eef1f7")
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.scrollbar.grid(row=0, column=1, sticky="ns")
+
+        # Bind mousewheel to canvas
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind_all("<Button-4>", self._on_mousewheel)
+        self.canvas.bind_all("<Button-5>", self._on_mousewheel)
+
+        # Configure scrollable_frame grid
+        self.scrollable_frame.grid_columnconfigure(0, weight=1)
+
+        # Card container
+        card = tk.Frame(self.scrollable_frame, bg="white", highlightthickness=1, highlightbackground="#DDDDDD")
+        card.grid(row=0, column=0, padx=30, pady=20, sticky="ew")
+        card.grid_columnconfigure(0, weight=1)
+
+        self._build_language_controls(card)
 
         self.region_label_var = tk.StringVar(value="Selected Region: None")
         self.status_label_var = tk.StringVar(value="Ready for Scanning")
         self.preview_label_var = tk.StringVar(value="OCR Preview: None")
 
-        tk.Label(card, text="SYSTEM STATUS", font=("Segoe UI", 8, "bold"), bg="white", fg="#65676B").pack(pady=(15, 0), padx=20, anchor="w")
-        tk.Label(card, textvariable=self.status_label_var, font=("Segoe UI", 12, "bold"), bg="white", fg="#1C1E21").pack(pady=(5, 10), padx=20, anchor="w")
-        tk.Label(card, textvariable=self.region_label_var, font=("Segoe UI", 9), bg="white", fg="#8A8D91").pack(padx=20, anchor="w")
-        tk.Label(card, textvariable=self.preview_label_var, font=("Segoe UI", 8), bg="white", fg="#8A8D91", wraplength=350, justify="left").pack(pady=(5, 15), padx=20, anchor="w")
+        tk.Label(card, text="SYSTEM STATUS", font=("Segoe UI", 8, "bold"), bg="white", fg="#65676B").grid(row=1, column=0, pady=(15, 0), padx=20, sticky="w")
+        tk.Label(card, textvariable=self.status_label_var, font=("Segoe UI", 12, "bold"), bg="white", fg="#1C1E21").grid(row=2, column=0, pady=(5, 10), padx=20, sticky="w")
+        tk.Label(card, textvariable=self.region_label_var, font=("Segoe UI", 9), bg="white", fg="#8A8D91").grid(row=3, column=0, padx=20, sticky="w")
+        self.preview_label = tk.Label(card, textvariable=self.preview_label_var, font=("Segoe UI", 8), bg="white", fg="#8A8D91", wraplength=350, justify="left")
+        self.preview_label.grid(row=4, column=0, pady=(5, 15), padx=20, sticky="w")
+
+        # Buttons frame - always visible at bottom
+        btn_frame = tk.Frame(self.scrollable_frame, bg="#eef1f7")
+        btn_frame.grid(row=1, column=0, padx=30, pady=(0, 20), sticky="ew")
+        btn_frame.grid_columnconfigure(0, weight=1)
 
         btn_style = {"font": ("Segoe UI", 10, "bold"), "fg": "white", "relief": "flat", "height": 2, "cursor": "hand2"}
 
-        tk.Button(self.root, text="OCR 번역 시작", bg="#5E66F2", command=self.open_selector, **btn_style).pack(padx=30, fill="x", pady=5)
-        tk.Button(self.root, text="퀴즈 풀기", bg="#8AA0F2", command=self.open_quiz, **btn_style).pack(padx=30, fill="x", pady=5)
-        tk.Button(self.root, text="저장 기록 보기", bg="#99A6F2", command=self.open_study_list, **btn_style).pack(padx=30, fill="x", pady=5)
-        tk.Button(self.root, text="설정", bg="#6B7FF2", command=self.open_settings, **btn_style).pack(padx=30, fill="x", pady=5)
+        tk.Button(btn_frame, text="OCR 번역 시작", bg="#5E66F2", command=self.open_selector, **btn_style).grid(row=0, column=0, sticky="ew", pady=5)
+        tk.Button(btn_frame, text="퀴즈 풀기", bg="#8AA0F2", command=self.open_quiz, **btn_style).grid(row=1, column=0, sticky="ew", pady=5)
+        tk.Button(btn_frame, text="저장 기록 보기", bg="#99A6F2", command=self.open_study_list, **btn_style).grid(row=2, column=0, sticky="ew", pady=5)
+        tk.Button(btn_frame, text="설정", bg="#6B7FF2", command=self.open_settings, **btn_style).grid(row=3, column=0, sticky="ew", pady=5)
 
-    def _build_language_controls(self) -> None:
-        frame = tk.Frame(self.root, bg="white")
-        frame.pack(pady=(5, 10))
+        # Bind canvas resize to update scrollable_frame width
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+
+    def _on_mousewheel(self, event) -> None:
+        if event.delta:
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        elif event.num == 4:
+            self.canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            self.canvas.yview_scroll(1, "units")
+
+    def _on_canvas_configure(self, event) -> None:
+        if self.canvas.find_withtag("all"):
+            self.canvas.itemconfig(self.canvas.find_withtag("all")[0], width=event.width)
+        if hasattr(self, 'preview_label') and self.preview_label.winfo_exists():
+            self.preview_label.configure(wraplength=max(200, event.width - 120))
+
+    def _build_language_controls(self, parent) -> None:
+        frame = tk.Frame(parent, bg="white")
+        frame.grid(row=0, column=0, pady=(5, 10), sticky="ew")
+        frame.grid_columnconfigure(1, weight=1)
+        frame.grid_columnconfigure(4, weight=1)
         
-        tk.Label(frame, text="원본:", font=("Segoe UI", 9, "bold"), bg="white", fg="#65676B").pack(side="left", padx=(0, 5))
+        tk.Label(frame, text="원본:", font=("Segoe UI", 9, "bold"), bg="white", fg="#65676B").grid(row=0, column=0, padx=(0, 5))
         
         self.source_lang_var = tk.StringVar(value=DEFAULT_SOURCE_LANGUAGE)
         
@@ -121,11 +184,11 @@ class MainApp:
             state="readonly",
             width=8,
         )
-        self.source_lang_combo.pack(side="left", padx=(0, 8))
+        self.source_lang_combo.grid(row=0, column=1, padx=(0, 8))
         
-        tk.Label(frame, text="->", font=("Segoe UI", 10, "bold"), bg="white", fg="#65676B").pack(side="left", padx=8)
+        tk.Label(frame, text="->", font=("Segoe UI", 10, "bold"), bg="white", fg="#65676B").grid(row=0, column=2, padx=8)
         
-        tk.Label(frame, text="번역:", font=("Segoe UI", 9, "bold"), bg="white", fg="#65676B").pack(side="left", padx=(0, 5))
+        tk.Label(frame, text="번역:", font=("Segoe UI", 9, "bold"), bg="white", fg="#65676B").grid(row=0, column=3, padx=(0, 5))
         
         self.translate_target_var = tk.StringVar(value=DEFAULT_TARGET_LANGUAGE)
         
@@ -136,7 +199,7 @@ class MainApp:
             state="readonly",
             width=8,
         )
-        self.translate_target_combo.pack(side="left")
+        self.translate_target_combo.grid(row=0, column=4)
 
     def _get_language_display(self, code: str) -> str:
         return get_language_name(code)
