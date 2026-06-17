@@ -14,7 +14,7 @@ class SettingsWindow:
 
         self.win = tk.Toplevel(parent)
         self.win.title("설정")
-        self.win.geometry("560x520")
+        self.win.geometry("520x530")
         self.win.minsize(460, 380)
         self.win.configure(bg="#f7f8fb")
 
@@ -25,7 +25,6 @@ class SettingsWindow:
         self.status_var = tk.StringVar(value=self._status_text())
 
         self._build_ui()
-        self.win.bind("<Configure>", self._on_window_resized)
 
     def _build_ui(self) -> None:
         container = tk.Frame(self.win, bg="#f7f8fb", padx=18, pady=16)
@@ -38,14 +37,13 @@ class SettingsWindow:
             bg="#f7f8fb",
             fg="#202124",
         ).pack(anchor="w")
-        self.info_label = tk.Label(
+        tk.Label(
             container,
             text="OCR 안정화와 선택 기능인 Gemini API를 관리합니다.",
             font=("Segoe UI", 9),
             bg="#f7f8fb",
             fg="#5f6368",
-        )
-        self.info_label.pack(anchor="w", pady=(2, 14), fill="x")
+        ).pack(anchor="w", pady=(2, 14))
 
         self._build_ocr_section(container)
         self._build_gemini_section(container)
@@ -77,23 +75,21 @@ class SettingsWindow:
         box = tk.LabelFrame(parent, text="Gemini API (선택 사항)", padx=12, pady=10, bg="#ffffff")
         box.pack(fill="x", pady=(0, 12))
 
-        self.gemini_help_label = tk.Label(
+        tk.Label(
             box,
             text="Gemini API 키는 필수가 아닙니다. 키가 없으면 기본 채점으로 동작하고, 문제/채점 품질만 낮아질 수 있습니다.",
             bg="#ffffff",
             fg="#5f6368",
             wraplength=450,
             justify="left",
-        )
-        self.gemini_help_label.pack(anchor="w", pady=(0, 8), fill="x")
+        ).pack(anchor="w", pady=(0, 8))
 
         key_row = tk.Frame(box, bg="#ffffff")
         key_row.pack(fill="x", pady=(0, 8))
         tk.Label(key_row, text="API 키", bg="#ffffff", width=10, anchor="w").pack(side="left")
         tk.Entry(key_row, textvariable=self.gemini_key_var, show="*", width=44).pack(side="left", fill="x", expand=True)
 
-        self.status_label = tk.Label(box, textvariable=self.status_var, bg="#ffffff", fg="#2d6cdf", justify="left", wraplength=450)
-        self.status_label.pack(anchor="w", fill="x")
+        tk.Label(box, textvariable=self.status_var, bg="#ffffff", fg="#2d6cdf", justify="left").pack(anchor="w")
 
         tk.Button(
             box,
@@ -149,12 +145,6 @@ class SettingsWindow:
         status = settings_status()
         gemini = "설정됨" if status["gemini_enabled"] else "미설정"
         return f"현재 Gemini 상태: {gemini}\n설정 저장 위치: {status['settings_path']}"
-
-    def _on_window_resized(self, _event=None) -> None:
-        wrap = max(320, self.win.winfo_width() - 80)
-        self.info_label.configure(wraplength=wrap)
-        self.gemini_help_label.configure(wraplength=wrap - 30)
-        self.status_label.configure(wraplength=wrap - 30)
 
     def save(self) -> None:
         settings = self._current_settings()
