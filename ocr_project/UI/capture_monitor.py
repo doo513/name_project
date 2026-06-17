@@ -72,7 +72,7 @@ class CaptureMonitor:
         screen_height = self.parent.winfo_screenheight()
 
         panel_width = 480
-        panel_height = 620
+        panel_height = 450
         panel_x = min(max(10, x1), max(10, screen_width - panel_width - 10))
 
         if y2 + 10 + panel_height <= screen_height:
@@ -85,12 +85,17 @@ class CaptureMonitor:
         self.win.geometry(f"{panel_width}x{panel_height}+{panel_x}+{panel_y}")
         self.win.attributes("-topmost", True)
         self.win.configure(bg="#1a1a2e")
-        self.win.minsize(480, 560)
+        self.win.minsize(350, 280)
         self.win.protocol("WM_DELETE_WINDOW", self.stop)
-        self.win.bind("<Configure>", self._on_window_resized)
 
+        # Configure grid for responsive layout
+        self.win.grid_columnconfigure(0, weight=1)
+        self.win.grid_rowconfigure(2, weight=1)
+
+        # Header - fixed height
         header = tk.Frame(self.win, bg="#4B4FA6", height=40)
-        header.pack(fill="x")
+        header.grid(row=0, column=0, sticky="ew")
+        header.grid_propagate(False)
         tk.Label(
             header,
             text=f"OCR 번역 - {width}x{height}",
@@ -99,6 +104,7 @@ class CaptureMonitor:
             font=("Segoe UI", 11, "bold"),
         ).pack(pady=8)
 
+        # Status label
         self.status_var = tk.StringVar(value="Ready to capture.")
         self.status_label = tk.Label(
             self.win,
@@ -109,10 +115,43 @@ class CaptureMonitor:
             wraplength=390,
             justify="left",
         )
-        self.status_label.pack(anchor="w", padx=12, pady=(8, 0), fill="x")
+        self.status_label.grid(row=1, column=0, sticky="ew", padx=12, pady=(8, 0))
 
+        # Result frame - expandable
+        result_frame = tk.LabelFrame(
+            self.win,
+            text="확정 OCR / 번역 결과",
+            bg="#1a1a2e",
+            fg="#00ff88",
+            padx=8,
+            pady=8,
+        )
+        result_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(10, 8))
+        result_frame.grid_columnconfigure(0, weight=1)
+        result_frame.grid_rowconfigure(0, weight=1)
+
+        self.result_text = tk.Text(
+            result_frame,
+            wrap="word",
+            font=("Consolas", 10),
+            bg="#111111",
+            fg="#00ff88",
+            insertbackground="#ffffff",
+            relief="flat",
+            padx=8,
+            pady=8,
+        )
+        self.result_text.grid(row=0, column=0, sticky="nsew")
+
+        scrollbar = ttk.Scrollbar(result_frame, orient="vertical", command=self.result_text.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.result_text.configure(yscrollcommand=scrollbar.set)
+        self.result_text.insert("1.0", "Waiting for OCR result...")
+
+        # Button row 1 - language controls
         btn_row = tk.Frame(self.win, bg="#1a1a2e")
-        btn_row.pack(side="bottom", fill="x", padx=12, pady=(4, 0))
+        btn_row.grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 4))
+        btn_row.grid_columnconfigure(4, weight=1)
 
         tk.Label(
             btn_row,
@@ -120,7 +159,7 @@ class CaptureMonitor:
             fg="white",
             bg="#1a1a2e",
             font=("Segoe UI", 9),
-        ).pack(side="left", padx=(0, 4))
+        ).grid(row=0, column=0, padx=(0, 4))
 
         self.source_lang_var = tk.StringVar(value=self.source_lang)
         source_combo = ttk.Combobox(
@@ -130,7 +169,7 @@ class CaptureMonitor:
             state="readonly",
             width=6,
         )
-        source_combo.pack(side="left", padx=(0, 4))
+        source_combo.grid(row=0, column=1, padx=(0, 4))
 
         tk.Label(
             btn_row,
@@ -138,7 +177,7 @@ class CaptureMonitor:
             fg="white",
             bg="#1a1a2e",
             font=("Segoe UI", 10, "bold"),
-        ).pack(side="left", padx=4)
+        ).grid(row=0, column=2, padx=4)
 
         tk.Label(
             btn_row,
@@ -146,7 +185,7 @@ class CaptureMonitor:
             fg="white",
             bg="#1a1a2e",
             font=("Segoe UI", 9),
-        ).pack(side="left", padx=(0, 4))
+        ).grid(row=0, column=3, padx=(0, 4))
 
         self.translate_target_var = tk.StringVar(value=self.target_lang)
         target_combo = ttk.Combobox(
@@ -156,7 +195,7 @@ class CaptureMonitor:
             state="readonly",
             width=6,
         )
-        target_combo.pack(side="left", padx=(0, 8))
+        target_combo.grid(row=0, column=4, padx=(0, 8))
 
         tk.Button(
             btn_row,
@@ -166,10 +205,11 @@ class CaptureMonitor:
             bg="#9b59b6",
             fg="white",
             font=("Segoe UI", 9, "bold"),
-        ).pack(side="left", padx=(4, 0))
+        ).grid(row=0, column=5, padx=(4, 0))
 
+        # Button row 2 - action buttons
         btn_row2 = tk.Frame(self.win, bg="#1a1a2e")
-        btn_row2.pack(side="bottom", fill="x", padx=12, pady=(4, 12))
+        btn_row2.grid(row=4, column=0, sticky="ew", padx=12, pady=(4, 12))
 
         tk.Button(
             btn_row2,
@@ -190,7 +230,7 @@ class CaptureMonitor:
             font=("Segoe UI", 9, "bold"),
         ).pack(side="left", padx=(8, 0))
         tk.Button(
-            btn_row,
+            btn_row2,
             text="중지",
             width=8,
             command=self.stop,
@@ -199,34 +239,13 @@ class CaptureMonitor:
             font=("Segoe UI", 9, "bold"),
         ).pack(side="right")
 
-        result_frame = tk.LabelFrame(
-            self.win,
-            text="확정 OCR / 번역 결과",
-            bg="#1a1a2e",
-            fg="#00ff88",
-            padx=8,
-            pady=8,
-        )
-        result_frame.pack(fill="both", expand=True, padx=12, pady=(10, 4))
+        # Bind configure event for dynamic wraplength
+        self.win.bind("<Configure>", self._on_window_configure)
 
-        scrollbar = tk.Scrollbar(result_frame)
-        scrollbar.pack(side="right", fill="y")
-
-        self.result_text = tk.Text(
-            result_frame,
-            wrap="word",
-            font=("Consolas", 10),
-            bg="#111111",
-            fg="#00ff88",
-            insertbackground="#ffffff",
-            relief="flat",
-            padx=8,
-            pady=8,
-            yscrollcommand=scrollbar.set,
-        )
-        self.result_text.pack(fill="both", expand=True)
-        scrollbar.config(command=self.result_text.yview)
-        self.result_text.insert("1.0", "Waiting for OCR result...")
+    def _on_window_configure(self, event) -> None:
+        if event.widget == self.win:
+            if hasattr(self, 'status_label') and self.status_label.winfo_exists():
+                self.status_label.configure(wraplength=max(200, event.width - 40))
 
     def get_source_lang(self) -> str:
         if hasattr(self, 'source_lang_var'):
